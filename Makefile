@@ -1,4 +1,4 @@
-.PHONY: start mound build cli-build release-build cli-clean install-local uninstall-local \
+.PHONY: start mound build cli-build dist-clean install-local uninstall-local \
         lint lint-fix lint-check format typecheck test test-watch test-coverage \
         check before-commit clean install install-ci help
 
@@ -6,7 +6,23 @@ BUN := $(or $(shell command -v bun 2>/dev/null),$(HOME)/.bun/bin/bun)
 BIOME := ./node_modules/.bin/biome
 ENTRY := packages/cli/src/index.ts
 DIST := dist
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo 0.0.0)
+
+# Host platform detection (for `make cli-build` / `make install-local`).
+HOST_OS := $(shell uname -s | tr A-Z a-z)
+HOST_ARCH := $(shell uname -m)
+ifeq ($(HOST_OS),darwin)
+  ifeq ($(HOST_ARCH),arm64)
+    HOST_PLATFORM := macos-arm64
+  else
+    HOST_PLATFORM := macos-x86_64
+  endif
+else
+  ifeq ($(HOST_ARCH),aarch64)
+    HOST_PLATFORM := linux-arm64
+  else
+    HOST_PLATFORM := linux-x86_64
+  endif
+endif
 
 # ===================================================
 # 試合成立エンジン — Makefile
@@ -18,47 +34,34 @@ start: install mound ## CLI を起動 (引数は ARGS で渡す: make start ARGS
 mound: ## CLI を実行 (例: make mound ARGS="team list")
 	$(BUN) run $(ENTRY) $(ARGS)
 
-## バイナリビルド
-build: cli-build ## 現プラットフォーム向けバイナリ (bin/mound)
+## バイナリ配布
+build: cli-build ## 現プラットフォーム向け配布物 (dist/local/mound-<host>)
 
-cli-build: ## 現プラットフォーム向け単一バイナリ (bin/mound)
-	@mkdir -p bin
-	$(BUN) build --compile --minify $(ENTRY) --outfile bin/mound
-	@echo "✅ bin/mound built"
+cli-build: ## 現プラットフォーム向け配布物を dist/local に生成
+	@rm -rf $(DIST)/local
+	@mkdir -p $(DIST)/local
+	@bash scripts/build-dist.sh $(HOST_PLATFORM) $(BUN) $(DIST)/local
+	@echo "✅ $(DIST)/local/mound-$(HOST_PLATFORM)"
 
-release-build: ## 4 ターゲット (macOS arm64/x86_64, Linux arm64/x86_64) tarball を dist/ に生成
-	@rm -rf $(DIST)
-	@mkdir -p $(DIST)
-	@$(MAKE) _release-target TARGET=bun-darwin-arm64  PLATFORM=macos-arm64
-	@$(MAKE) _release-target TARGET=bun-darwin-x64    PLATFORM=macos-x86_64
-	@$(MAKE) _release-target TARGET=bun-linux-arm64   PLATFORM=linux-arm64
-	@$(MAKE) _release-target TARGET=bun-linux-x64     PLATFORM=linux-x86_64
-	@cd $(DIST) && shasum -a 256 *.tar.gz > checksums.txt
-	@echo "✅ release artifacts:"
-	@ls -lh $(DIST)
+dist-clean: ## dist/ を全削除
+	rm -rf $(DIST)
 
-_release-target:
-	@echo "→ building $(PLATFORM) ($(TARGET))"
-	@$(BUN) build --compile --minify --target=$(TARGET) $(ENTRY) --outfile $(DIST)/mound-$(PLATFORM)
-	@cd $(DIST) && tar -czf mound-$(VERSION)-$(PLATFORM).tar.gz mound-$(PLATFORM)
-	@rm -f $(DIST)/mound-$(PLATFORM)
-
-cli-clean: ## ビルド成果物を削除
-	rm -rf bin $(DIST)
-
-INSTALL_DIR ?= $(HOME)/.local/bin
-install-local: cli-build ## bin/mound を $(INSTALL_DIR) に symlink (デフォルト ~/.local/bin)
-	@mkdir -p $(INSTALL_DIR)
-	@ln -sf $(abspath bin/mound) $(INSTALL_DIR)/mound
-	@echo "✅ $(INSTALL_DIR)/mound -> $(abspath bin/mound)"
+INSTALL_PREFIX ?= $(HOME)/.local
+install-local: cli-build ## $(INSTALL_PREFIX)/{bin,share} に配置 (デフォルト ~/.local)
+	@mkdir -p $(INSTALL_PREFIX)/share $(INSTALL_PREFIX)/bin
+	@rm -rf $(INSTALL_PREFIX)/share/mound
+	@cp -R $(DIST)/local/mound-$(HOST_PLATFORM) $(INSTALL_PREFIX)/share/mound
+	@ln -sf $(INSTALL_PREFIX)/share/mound/bin/mound $(INSTALL_PREFIX)/bin/mound
+	@echo "✅ $(INSTALL_PREFIX)/bin/mound -> $(INSTALL_PREFIX)/share/mound/bin/mound"
 	@case ":$$PATH:" in \
-	  *":$(INSTALL_DIR):"*) ;; \
-	  *) echo "⚠  $(INSTALL_DIR) は PATH に入っていません。~/.zshrc に export PATH=\"$(INSTALL_DIR):\$$PATH\" を追記してください" ;; \
+	  *":$(INSTALL_PREFIX)/bin:"*) ;; \
+	  *) echo "⚠  $(INSTALL_PREFIX)/bin は PATH に入っていません" ;; \
 	esac
 
-uninstall-local: ## $(INSTALL_DIR)/mound の symlink を削除
-	@rm -f $(INSTALL_DIR)/mound
-	@echo "✅ removed $(INSTALL_DIR)/mound"
+uninstall-local: ## $(INSTALL_PREFIX) から削除
+	@rm -f $(INSTALL_PREFIX)/bin/mound
+	@rm -rf $(INSTALL_PREFIX)/share/mound
+	@echo "✅ uninstalled from $(INSTALL_PREFIX)"
 
 ## 品質チェック
 lint: ## Biome lint チェック
@@ -100,8 +103,8 @@ install-ci: ## CI用インストール (install後にlockfile差分チェック)
 	$(BUN) install
 	git diff --exit-code bun.lock || (echo "ERROR: bun.lock is out of date. Run 'bun install' locally and commit bun.lock." && exit 1)
 
-clean: cli-clean ## ビルド成果物・キャッシュを削除
-	rm -rf packages/cli/tsconfig.tsbuildinfo
+clean: dist-clean ## ビルド成果物・キャッシュを削除
+	rm -rf bin packages/cli/tsconfig.tsbuildinfo
 	rm -rf tsconfig.tsbuildinfo
 
 ## ヘルプ

@@ -8,8 +8,12 @@
 # to the GitHub Release as `mound.rb`. Copy the released `mound.rb` to your
 # Homebrew tap repository (e.g. susumutomita/homebrew-tap) to publish.
 #
-# The placeholder values below are intentionally invalid so that they fail
-# loudly if you forget to regenerate them.
+# Each platform tarball contains:
+#   mound-<platform>/bin/mound          (shell launcher)
+#   mound-<platform>/libexec/mound/...  (Bun runtime + JS bundle + libsql native binding)
+#
+# The placeholders below are intentionally invalid so they fail loudly if you
+# forget to regenerate this file.
 class Mound < Formula
   desc "草野球チーム向け試合成立 CLI"
   homepage "https://github.com/susumutomita/mound"
@@ -39,15 +43,8 @@ class Mound < Formula
   end
 
   def install
-    if OS.mac? && Hardware::CPU.arm?
-      bin.install "mound-macos-arm64" => "mound"
-    elsif OS.mac?
-      bin.install "mound-macos-x86_64" => "mound"
-    elsif OS.linux? && Hardware::CPU.arm?
-      bin.install "mound-linux-arm64" => "mound"
-    else
-      bin.install "mound-linux-x86_64" => "mound"
-    end
+    libexec.install Dir["libexec/mound"]
+    bin.install "bin/mound"
   end
 
   test do

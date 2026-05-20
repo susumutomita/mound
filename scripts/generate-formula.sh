@@ -4,8 +4,9 @@
 # Usage:
 #   scripts/generate-formula.sh <version> <owner/repo> <dist-dir> > Formula/mound.rb
 #
-# Reads <dist-dir>/mound-<version>-<platform>.tar.gz.sha256 for each platform
-# and emits a Ruby formula with the correct URL + SHA256 per arch.
+# Each platform tarball contains:
+#   mound-<platform>/bin/mound          (shell launcher)
+#   mound-<platform>/libexec/mound/...  (Bun runtime + JS bundle + native deps)
 set -euo pipefail
 
 VERSION="${1:?version (e.g. v0.1.0) required}"
@@ -59,19 +60,15 @@ class Mound < Formula
   end
 
   def install
-    if OS.mac? && Hardware::CPU.arm?
-      bin.install "mound-macos-arm64" => "mound"
-    elsif OS.mac?
-      bin.install "mound-macos-x86_64" => "mound"
-    elsif OS.linux? && Hardware::CPU.arm?
-      bin.install "mound-linux-arm64" => "mound"
-    else
-      bin.install "mound-linux-x86_64" => "mound"
-    end
+    libexec.install Dir["libexec/mound"]
+    bin.install "bin/mound"
+    # The launcher resolves \$(dirname \$0)/.. which after a Homebrew
+    # install lands at the keg prefix, so libexec/mound/{bun,mound.js,node_modules}
+    # are reachable.
   end
 
   test do
-    assert_match "mound 0.1.0", shell_output("#{bin}/mound --version")
+    assert_match "mound $bare_version", shell_output("#{bin}/mound --version")
   end
 end
 EOF
