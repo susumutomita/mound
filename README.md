@@ -1,6 +1,6 @@
 # mound
 
-草野球チーム向け試合成立 CLI。試合希望・出欠・状態遷移・監査ログを SQLite (libSQL) に保存し、エージェントからも操作できる単一バイナリで提供する。
+草野球チーム向け試合成立 CLI。試合希望・出欠・状態遷移・監査ログを SQLite (libSQL / Turso) に保存し、エージェントや CodexBar 風 macOS メニューバーアプリから操作できる。
 
 > AI は提案する。システムは状態を持つ。人が最後に決める。
 
@@ -10,17 +10,21 @@
 
 ```bash
 brew install susumutomita/tap/mound
+mound --version
 ```
 
 ### GitHub Releases から直接
+
+配布物は単一バイナリではなく、`bin/mound`(POSIX sh launcher)+ `libexec/mound/`(Bun runtime + JS bundle + libsql native binding)のディレクトリ構造。ディレクトリ全体を保ったまま移動する必要がある。
 
 ```bash
 # macOS arm64 の例
 curl -L -o mound.tar.gz \
   https://github.com/susumutomita/mound/releases/latest/download/mound-vX.Y.Z-macos-arm64.tar.gz
-tar -xzf mound.tar.gz
-sudo mv mound-macos-arm64 /usr/local/bin/mound
-mound --help
+tar -xzf mound.tar.gz                                   # → mound-macos-arm64/
+sudo cp -R mound-macos-arm64 /usr/local/share/mound
+sudo ln -sf /usr/local/share/mound/bin/mound /usr/local/bin/mound
+mound --version
 ```
 
 ターゲット: `macos-arm64` / `macos-x86_64` / `linux-arm64` / `linux-x86_64`。SHA256 はリリースの `checksums.txt` を参照。
@@ -31,13 +35,14 @@ mound --help
 git clone https://github.com/susumutomita/mound.git
 cd mound
 make install        # 依存インストール
-make install-local  # dist/local/mound-<host> を ~/.local/share/mound に配置 + ~/.local/bin/mound に symlink
+make install-local  # dist/local/mound-<host>/ を $HOME/.local/share/mound にコピー +
+                    # $HOME/.local/bin/mound に launcher への symlink
 mound --version
 ```
 
-`make cli-build` 単体だと `dist/local/mound-<host>/` のみ生成して PATH には乗せない。`INSTALL_PREFIX` で行き先変更可(`make install-local INSTALL_PREFIX=/opt/homebrew`)。`make uninstall-local` で削除。
+`make cli-build` 単体だと `dist/local/mound-<host>/` を生成するだけで PATH に乗らない。`INSTALL_PREFIX` で行き先変更可(例: `make install-local INSTALL_PREFIX=/opt/homebrew`)。`make uninstall-local` で削除。
 
-> **配布の仕組み:** Bun の `bun build --compile` は libsql の native binding (`@libsql/<platform>/index.node`) を埋め込めない (`@neon-rs/load` が動的 require を使うため)。よって配布物は `bin/mound` (shell launcher) + `libexec/mound/{bun,mound.js,node_modules}` の構造になっており、launcher が Bun runtime + JS bundle + libsql native を組み合わせて実行する。
+> **配布の仕組み:** Bun の `bun build --compile` は libsql の native binding (`@libsql/<platform>/index.node`) を埋め込めない(`@neon-rs/load` が動的 require を使うため)。配布物は `bin/mound` (POSIX sh launcher) + `libexec/mound/{bun, mound.js, node_modules}` の構造で、launcher が `$(dirname "$0")/../libexec/mound/bun` を `exec` して JS bundle を Bun runtime で動かす。
 
 ## クイックスタート
 
@@ -63,21 +68,32 @@ export MOUND_DB_AUTH_TOKEN="..."                # Turso 認証
 
 未指定なら `~/.mound/mound.db` を使う。
 
-## CI/Release の仕組み
+## GUI: MoundMenuBar (macOS メニューバー)
+
+`packages/menubar/` に macOS 14+ 用のメニューバー常駐アプリがある(CodexBar 面取り)。30 秒ごとに `mound agenda --json` を spawn してポップオーバーに 5 バケットの件数を出すだけの薄いラッパー。
+
+```bash
+cd packages/menubar
+swift run MoundMenuBar
+```
+
+詳細は [`packages/menubar/README.md`](packages/menubar/README.md)。
+
+## CI / Release
 
 | Workflow | トリガ | 内容 |
 | --- | --- | --- |
-| [`ci.yml`](.github/workflows/ci.yml) | push / PR | lint + typecheck + test + バイナリ smoke |
-| [`release.yml`](.github/workflows/release.yml) | `v*` タグ push | 4 ターゲット tarball + checksums + Homebrew formula を GitHub Release に添付 |
+| [`ci.yml`](.github/workflows/ci.yml) | push / PR | lint + typecheck + test + 実 tarball isolation smoke + `swift build`/`swift test` (menubar) + shellcheck |
+| [`release.yml`](.github/workflows/release.yml) | `v*` タグ push | 4 プラットフォーム tarball + checksums + Homebrew formula を Release に添付 |
 
 リリース手順:
 
 ```bash
 git tag v0.1.0
-git push origin v0.1.0   # → release.yml が走る
+git push origin v0.1.0   # → release.yml が走り、各 native runner で build + isolation smoke 後 upload
 ```
 
-リリースが完了したら、Release ページに `mound.rb` が添付されている。これを `susumutomita/homebrew-tap` リポジトリの `Formula/mound.rb` にコピー・コミット・push すれば `brew install susumutomita/tap/mound` で配布できる。
+リリース完了後、Release ページに `mound.rb`(値埋め済み)が添付される。`susumutomita/homebrew-tap` リポジトリの `Formula/mound.rb` にコピー・コミット・push すれば `brew install susumutomita/tap/mound` で配布できる。
 
 tap リポジトリの最小構成:
 
@@ -90,30 +106,51 @@ homebrew-tap/
 ## 開発
 
 ```bash
-make check          # lint + typecheck + test
+make check          # lint + typecheck + test (コミット前必須)
 make mound ARGS="--help"
-make release-build  # ローカルで 4 ターゲット tarball を生成 (Bun が必要)
+make cli-build      # 現プラットフォーム向け dist/local/mound-<host>/ を生成
+make install-local  # PATH に通す
 ```
 
 ## 主要コマンド一覧
 
 | コマンド | 用途 |
 | --- | --- |
-| `make check` | lint + typecheck + test (コミット前に必須) |
-| `make cli-build` | 現プラットフォーム向け単一バイナリ (`bin/mound`) |
-| `make release-build` | 4 ターゲット tarball + SHA256 を `dist/` に生成 |
+| `make check` | lint + typecheck + test |
+| `make cli-build` | 現プラットフォーム向け配布物を `dist/local/mound-<host>/` に生成 |
+| `make install-local` | `$HOME/.local/{bin,share}` にインストール |
+| `make uninstall-local` | アンインストール |
 | `make help` | 全コマンド一覧 |
 
 ## アーキテクチャ
 
-- `packages/cli/` — CLI 本体 (Bun + `@libsql/client` + zod)
-- `Formula/` — Homebrew formula テンプレート (リリース時に上書き)
-- `scripts/generate-formula.sh` — リリース成果物から formula を組み立てる
+```
+packages/
+├── cli/                  # mound 本体 (Bun + @libsql/client + zod)
+│   ├── src/
+│   │   ├── domain/       # 純粋ロジック (types, state-machine, guards)
+│   │   ├── ports.ts      # Repository インターフェイス
+│   │   ├── usecases/     # ビジネスルール (ports.ts のみ依存)
+│   │   └── adapters/
+│   │       ├── libsql/   # libSQL 実装
+│   │       └── cli/      # argv → usecase → 出力
+│   └── scripts/
+│       └── mound-launcher.sh   # POSIX sh launcher (配布物に同梱)
+└── menubar/              # macOS 14+ メニューバー常駐アプリ (SwiftPM)
+    ├── Sources/MoundMenuBar/
+    └── Tests/
 
-GUI は **macOS メニューバーアプリ (Swift / SwiftPM, CodexBar 面取り)** が `mound` CLI を spawn して利用する想定。Web UI は作らない。
+Formula/mound.rb          # Homebrew formula テンプレート (リリース時に上書き)
+scripts/
+├── build-dist.sh         # tarball 用配布物を組み立てる
+└── generate-formula.sh   # リリース成果物から Formula を生成
+```
+
+依存方向は **adapters → usecases → ports → domain** の一方向のみ。詳細は [CLAUDE.md](./CLAUDE.md)。
 
 ## 禁止事項
 
-- 認証情報・秘密鍵のハードコード禁止 (`.env` を使用)
+- 認証情報・秘密鍵のハードコード禁止(`MOUND_DB_AUTH_TOKEN` 等の環境変数を使う)
 - `make check` が通らない状態でのコミット禁止
 - TypeScript strict mode の無効化禁止
+- DB-row 値を `as` で union 型へ無検査キャスト禁止(`domain/guards.ts` の `assert*` を使う)
