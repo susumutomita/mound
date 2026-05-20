@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-草野球チーム向け試合成立エンジン SaaS。仕様は [SPEC.md](./SPEC.md) を参照。
+草野球チーム向け試合成立 CLI。試合希望・出欠・状態遷移・監査ログを libSQL (SQLite/Turso) に保存し、`mound` コマンドで操作する。GUI は CodexBar 風 macOS メニューバーアプリのみ(CLI を spawn ラップ)。詳細は [SPEC.md](./SPEC.md)。
 
 ## コマンド
 
@@ -10,13 +10,60 @@
 make check          # lint + typecheck + test (変更後に必ず実行)
 make lint-fix       # 自動修正
 make test           # テスト実行
-make start          # 開発サーバー起動
+make mound ARGS="--help"  # CLI 実行
+make cli-build      # bin/mound にバイナリを生成
+make install-local  # bin/mound を $HOME/.local/bin に symlink
+make release-build  # 4 ターゲット tarball を dist/ に生成
 make help           # 全コマンド一覧
 ```
 
+## アーキテクチャ (Clean Architecture)
+
+依存方向は常に内向き(domain ← usecases ← adapters):
+
+```
+packages/cli/src/
+├── domain/              # 内側: 純粋な型 + 不変ルール (I/O 非依存)
+│   ├── types.ts         # エンティティ・値型・状態列挙
+│   ├── guards.ts        # isGameStatus / assertGameStatus 等
+│   └── state-machine.ts # 状態遷移 + ガード条件
+├── ports.ts             # アプリケーション境界: Repository インターフェイス + UseCaseContext
+├── usecases/            # ビジネスルール: ports.ts のみ依存。DB も CLI も知らない
+│   ├── team.ts          # createTeam / listTeams
+│   ├── member.ts        # addMember / listMembers
+│   ├── game.ts          # createGame / listGames / showGame / transitionGame
+│   ├── rsvp.ts          # setRsvp / listRsvpsWithMembers / summarizeRsvps
+│   ├── audit.ts         # writeAuditLog / listAuditLogs
+│   ├── agenda.ts        # computeAgenda
+│   └── errors.ts        # ドメイン例外
+└── adapters/            # 外側: ports.ts を実装、または駆動する
+    ├── libsql/          # libSQL 実装
+    │   ├── client.ts    # DB 接続 + lazy migration (PRAGMA user_version)
+    │   ├── schema.ts    # DDL + SCHEMA_VERSION
+    │   ├── row-mappers.ts
+    │   └── repositories.ts  # buildRepositories(db): Repositories
+    └── cli/             # CLI 駆動層: argv → usecase → 出力
+        ├── args.ts      # フラグパーサ
+        ├── output.ts    # JSON / TSV レンダラ
+        ├── help.ts
+        ├── zod-helper.ts
+        ├── compose.ts   # DI ワイヤリング
+        ├── cli.ts       # ディスパッチャ
+        └── commands/    # 各サブコマンドの薄いアダプタ
+```
+
+新機能を作るときの順序:
+
+1. `domain/` に必要な型・ルールを足す
+2. `ports.ts` を見て足りない repository メソッドがあれば追加
+3. `usecases/<feature>.ts` にビジネスロジックを書く(ports.ts と domain/ のみ import)
+4. `adapters/libsql/repositories.ts` に SQL 実装を足す
+5. `adapters/cli/commands/<feature>.ts` で usecase を呼ぶ
+6. usecase の単体テスト(in-memory ポートで)+ e2e テストを追加
+
 ## 開発ルール
 
-### 変更後は必ず `make before-commit` を通す
+### 変更後は必ず `make check` を通す
 
 lint・型チェック・テストが全て通ることを確認してからコミットする。
 
@@ -25,122 +72,45 @@ lint・型チェック・テストが全て通ることを確認してからコ�
 日本語の `describe` / `it` で振る舞いを記述する。テスト名は「〜のとき」「〜する」形式。
 
 ```ts
-describe("canConfirm", () => {
-  describe("すべての条件を満たしているとき", () => {
-    it("確定を許可する", () => { ... });
+describe("transitionGame", () => {
+  describe("人数不足のとき", () => {
+    it("CONFIRMED への遷移を拒否する", () => { ... });
   });
 });
 ```
 
-- Arrange-Act-Assert パターンを守る
-- 1つの `it` で1つの振る舞いのみテストする
-- ファクトリ関数 (`createMatchRequest()` など) でデフォルト値付きテストデータを用意し、差分だけ `overrides` で渡す
-- テストファイルは `src/__tests__/*.test.ts` に配置する
+- Arrange-Act-Assert
+- 1 つの `it` で 1 振る舞い
+- ファクトリ関数(`createTeam()` 等)でデフォルト値、差分だけ `overrides` で渡す
+- ユースケース層は **in-memory な port 実装(fake)** に対してテストする(`__tests__/usecases/`)
+- 統合は `e2e-binary.test.ts` でコンパイル済みバイナリ越しに踏む
+
+### 依存方向の禁則
+
+- `domain/` から `adapters/` や `usecases/` を import するな
+- `usecases/` から `adapters/` を import するな(逆はOK)
+- `adapters/libsql/` から `adapters/cli/` を import するな(逆もNG)
 
 ### 禁止事項
 
-- 認証情報・秘密鍵のハードコード禁止 → `.env` を使用
+- 認証情報・秘密鍵のハードコード禁止 → 環境変数 (`MOUND_DB_AUTH_TOKEN` 等)
 - TypeScript strict mode の無効化禁止
-- ユーザー入力の無検証での使用禁止 (必ず Zod スキーマで検証)
+- ユーザー入力の無検証使用禁止(必ず Zod スキーマで検証)
+- DB-row 値を `as` で union 型へ無検査キャスト禁止(`domain/guards.ts` の assert\* を使う)
 
 ### Git コミット
 
-`feat:` / `fix:` / `refactor:` / `docs:` / `test:` / `chore:` のプレフィックスを使用する。
+`feat:` / `fix:` / `refactor:` / `docs:` / `test:` / `chore:` のプレフィックスを使用。
 
-## ドキュメント
+## 配布
 
-| ファイル | 内容 |
-| --- | --- |
-| [SPEC.md](./SPEC.md) | 機能仕様・ドメインモデル |
-| [docs/architecture.md](./docs/architecture.md) | アーキテクチャ設計・通知戦略 |
-| [docs/data-model.md](./docs/data-model.md) | データモデル・ER図・DFD |
-| [docs/agent-protocol.md](./docs/agent-protocol.md) | AI エージェントプロトコル |
-| [docs/diagrams.md](./docs/diagrams.md) | システム図 |
-| [docs/migration-strategy.md](./docs/migration-strategy.md) | v1→v2 マイグレーション戦略 |
-| [docs/operations-reality.md](./docs/operations-reality.md) | 運用上の現実・制約 |
+- ローカル: `make install-local` で `~/.local/bin/mound` に symlink
+- リリース: `git tag v0.X.Y && git push origin v0.X.Y` で `.github/workflows/release.yml` が走り、4 プラットフォーム tarball + Homebrew formula を Release に添付
+- Homebrew: `Formula/mound.rb` (テンプレ) を `scripts/generate-formula.sh` が値埋め生成。`susumutomita/homebrew-tap` リポジトリにコピーして配布
 
-## 設計思想
+## 商用品質基準
 
-- AI は **提案** する (Planner) — AI が勝手に確定・実行しない
-- システムは **状態を持つ** (State Machine) — 状態遷移は `packages/core/lib/state-machine.ts` が正本
-- ルールエンジンが **暴走を防ぐ** (Governor) — `packages/core/lib/governor.ts` で成立条件を判定
-- 人が **最後に承認する** — CONFIRMED 遷移は必ず人間のアクションを要求する
-
-## 自律改善エージェント ガイドライン
-
-スケジュール実行やIssueドリブンで自律的にプロダクトを改善するエージェント向けのルール。
-
-### 実行フロー
-
-```
-1. GitHub Issues を確認 (open, ラベル: enhancement/bug/chore)
-2. 優先度判定 (bug > enhancement > chore)
-3. ブランチ作成 (claude/<issue-slug>-<number>)
-4. 実装 + テスト追加
-5. make check 通過を確認
-6. コミット + プッシュ
-7. PR 作成 (Closes #<number> をbodyに含める)
-```
-
-### 制約
-
-- **破壊的変更禁止**: 既存のAPIシグネチャ・型定義を壊さない
-- **テスト必須**: 新機能には必ずテストを追加する。既存テストを壊さない
-- **1 Issue = 1 PR**: Issue ごとにブランチを分ける
-- **スコープ厳守**: Issue に書かれた範囲のみ実装する。関連する改善を見つけても別 Issue にする
-- **ドキュメント不要**: README/CLAUDE.md の更新はユーザーが明示的に依頼した場合のみ
-- **依存追加は慎重に**: 新しい npm パッケージの追加は最小限に
-
-### コード品質チェックリスト
-
-- [ ] `make check` (lint + typecheck + test) が通る
-- [ ] 新しいエクスポートは `packages/core/src/index.ts` に追加済み
-- [ ] Zod バリデーションを使っている (ユーザー入力)
-- [ ] `Result<T, E>` パターンでエラーハンドリングしている
-- [ ] BDD スタイルのテストを書いている (日本語 describe/it)
-- [ ] ファクトリ関数でテストデータを用意している
-
-## 商用品質基準 (Production Quality Standard)
-
-**このプロダクトは「出荷できる品質」を常に維持する。妥協しない。**
-
-### フロントエンド必須要件
-
-#### エラーハンドリング
-- **全ページに `error.tsx` を配置**: サーバーコンポーネントのクラッシュをキャッチする
-- **全ページに `loading.tsx` を配置**: データ取得中のスケルトン/スピナーを表示する
-- **API呼び出しは全て try/catch**: `.catch(() => {})` で握り潰さない。ユーザーに何が起きたか伝える
-- **空状態 (Empty State)**: データがゼロ件のとき「データがありません」だけでなく、次のアクションを提示する
-
-#### メタ情報
-- **OGP タグ必須**: og:title, og:description, og:image, og:url — SNS でシェアされたとき正しく表示
-- **favicon 必須**: `/app/icon.svg` または `/public/favicon.ico`
-- **viewport, charset**: Next.js のデフォルトに任せず明示する
-
-#### UI/UX
-- **ローディング状態**: ボタンクリック後、処理中は `loading` prop でボタンを無効化 + スピナー表示
-- **確認ダイアログ**: 破壊的操作 (ログアウト、削除、キャンセル) は確認を挟む
-- **フィードバック**: 操作成功時は Flashbar/Toast で結果を伝える
-- **レスポンシブ**: モバイルファーストで設計。Cloudscape の ColumnLayout は画面幅に応じて列数を変える
-
-#### セキュリティ
-- **全APIルートに認証チェック**: 公開エンドポイント以外は `requireAuth()` 必須
-- **認可チェック**: 自分のチームのデータだけアクセスできる (team_id の所有権検証)
-- **入力検証**: Zod スキーマで全入力をバリデーション。未検証データを DB に渡さない
-
-### API ルート必須要件
-- Supabase クエリの `{ data, error }` は **必ず error をチェック** する
-- レスポンスは常に `apiSuccess()` / `apiError()` ヘルパーで返す
-- `data` が null/undefined の可能性がある場合は明示的にハンドリングする
-
-### パッケージ構造の理解
-
-```
-packages/core/   → ビジネスロジック (純粋関数・型定義・バリデーション)
-packages/web/    → Next.js フロントエンド + API Routes
-packages/mcp/    → Claude MCP サーバー (エージェント向けツール)
-supabase/        → DB マイグレーション・シードデータ
-scripts/         → ユーティリティスクリプト
-```
-
-core パッケージのモジュールを変更した場合、web/mcp で利用する場合は `index.ts` からエクスポートすること。
+- 全コマンド `--json` を受け付ける(エージェント / GUI 連携)
+- ドメイン例外は `usecases/errors.ts` に分類し、CLI 層で exit code に翻訳
+- libSQL クエリは必ずパラメータ化(`?` プレースホルダ)
+- DB 接続は `ensureSchemaUpToDate` で lazy migration(`PRAGMA user_version`)

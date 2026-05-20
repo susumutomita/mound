@@ -1,0 +1,288 @@
+// 実バイナリを spawn して Phase 1 ループを最初から最後まで走らせる e2e シナリオテスト。
+// bin/mound が無いときは `make cli-build` で生成する。
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const repoRoot = resolve(__dirname, "../../../..");
+const binary = resolve(repoRoot, "bin/mound");
+
+function ensureBinary(): void {
+  if (existsSync(binary)) return;
+  // ローカルで一度ビルドしておく
+  execFileSync("make", ["cli-build"], { cwd: repoRoot, stdio: "inherit" });
+  if (!existsSync(binary)) {
+    throw new Error(`bin/mound build failed: ${binary} not found`);
+  }
+}
+
+interface RunResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+function runMound(
+  args: string[],
+  env: Record<string, string>,
+  opts: { timeout?: number } = {},
+): RunResult {
+  const r = spawnSync(binary, args, {
+    env: { ...process.env, ...env },
+    encoding: "utf-8",
+    timeout: opts.timeout ?? 15000,
+  });
+  return {
+    code: r.status ?? -1,
+    stdout: r.stdout ?? "",
+    stderr: r.stderr ?? "",
+  };
+}
+
+function parseJson<T>(out: string): T {
+  const trimmed = out.trim();
+  if (!trimmed) throw new Error("empty stdout");
+  return JSON.parse(trimmed) as T;
+}
+
+describe("e2e: bin/mound を実際に spawn する Phase 1 シナリオ", () => {
+  let dbDir: string;
+  let env: Record<string, string>;
+
+  beforeAll(() => {
+    ensureBinary();
+    dbDir = mkdtempSync(join(tmpdir(), "mound-e2e-"));
+    env = { MOUND_DB_URL: `file:${join(dbDir, "deep", "mound.db")}` };
+  });
+
+  describe("セットアップのとき", () => {
+    it("--version で 0 終了する", () => {
+      const r = runMound(["--version", "--json"], env);
+      expect(r.code).toBe(0);
+      expect(parseJson<{ version: string }>(r.stdout).version).toMatch(
+        /^\d+\.\d+\.\d+$/,
+      );
+    });
+
+    it("init で DB が作られる (親 dir が存在しなくても通る)", () => {
+      const r = runMound(["init", "--json"], env);
+      expect(r.stderr).toBe("");
+      expect(r.code).toBe(0);
+      const file = env.MOUND_DB_URL.slice("file:".length);
+      expect(existsSync(file)).toBe(true);
+      expect(existsSync(dirname(file))).toBe(true);
+    });
+  });
+
+  describe("試合希望 → 出欠 → 確定 の Phase 1 ループのとき", () => {
+    it("CONFIRMED まで実バイナリで完走する", () => {
+      // チーム作成
+      const teamR = runMound(
+        ["team", "create", "--name", "横浜BB", "--area", "横浜", "--json"],
+        env,
+      );
+      expect(teamR.code).toBe(0);
+      const team = parseJson<{ id: string; name: string }>(teamR.stdout);
+      expect(team.name).toBe("横浜BB");
+
+      // メンバー 10 人追加
+      const memberIds: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const r = runMound(
+          [
+            "member",
+            "add",
+            "--team",
+            team.id,
+            "--name",
+            `メンバー${i}`,
+            "--json",
+          ],
+          env,
+        );
+        expect(r.code).toBe(0);
+        memberIds.push(parseJson<{ id: string }>(r.stdout).id);
+      }
+      const listR = runMound(
+        ["member", "list", "--team", team.id, "--json"],
+        env,
+      );
+      expect(parseJson<unknown[]>(listR.stdout)).toHaveLength(10);
+
+      // 試合を DRAFT で作成
+      const gameR = runMound(
+        [
+          "game",
+          "create",
+          "--team",
+          team.id,
+          "--title",
+          "練習試合",
+          "--date",
+          "2026-06-01",
+          "--ground",
+          "公園グラウンド",
+          "--min-players",
+          "9",
+          "--json",
+        ],
+        env,
+      );
+      expect(gameR.code).toBe(0);
+      const game = parseJson<{ id: string; status: string }>(gameR.stdout);
+      expect(game.status).toBe("DRAFT");
+
+      // COLLECTING に遷移
+      const t1 = runMound(
+        ["game", "transition", game.id, "--to", "COLLECTING", "--json"],
+        env,
+      );
+      expect(t1.code).toBe(0);
+      expect(parseJson<{ status: string }>(t1.stdout).status).toBe(
+        "COLLECTING",
+      );
+
+      // 9 人が AVAILABLE で回答
+      for (let i = 0; i < 9; i++) {
+        const r = runMound(
+          [
+            "rsvp",
+            "set",
+            "--game",
+            game.id,
+            "--member",
+            memberIds[i] as string,
+            "--response",
+            "AVAILABLE",
+            "--json",
+          ],
+          env,
+        );
+        expect(r.code).toBe(0);
+      }
+      // 残り 1 人は不参加
+      const lastR = runMound(
+        [
+          "rsvp",
+          "set",
+          "--game",
+          game.id,
+          "--member",
+          memberIds[9] as string,
+          "--response",
+          "UNAVAILABLE",
+          "--json",
+        ],
+        env,
+      );
+      expect(lastR.code).toBe(0);
+
+      // summary 確認
+      const sR = runMound(
+        ["rsvp", "summary", "--game", game.id, "--json"],
+        env,
+      );
+      const summary = parseJson<{
+        available: number;
+        unavailable: number;
+        no_response: number;
+      }>(sR.stdout);
+      expect(summary.available).toBe(9);
+      expect(summary.unavailable).toBe(1);
+      expect(summary.no_response).toBe(0);
+
+      // CONFIRMED に遷移できる
+      const t2 = runMound(
+        ["game", "transition", game.id, "--to", "CONFIRMED", "--json"],
+        env,
+      );
+      expect(t2.code).toBe(0);
+      expect(parseJson<{ status: string }>(t2.stdout).status).toBe("CONFIRMED");
+
+      // agenda が upcoming にこの試合を含む
+      const aR = runMound(
+        ["agenda", "--team", team.id, "--horizon-days", "60", "--json"],
+        env,
+      );
+      expect(aR.code).toBe(0);
+      const agenda = parseJson<{
+        upcoming: Array<{ game: { id: string } }>;
+      }>(aR.stdout);
+      expect(agenda.upcoming.some((u) => u.game.id === game.id)).toBe(true);
+
+      // audit ログに全イベントが残っている
+      const auditR = runMound(["audit", "--target", game.id, "--json"], env);
+      expect(auditR.code).toBe(0);
+      const actions = parseJson<Array<{ action: string }>>(auditR.stdout).map(
+        (l) => l.action,
+      );
+      expect(actions).toContain("GAME_CREATED");
+      expect(actions).toContain("GAME_TRANSITION:DRAFT->COLLECTING");
+      expect(actions).toContain("GAME_TRANSITION:COLLECTING->CONFIRMED");
+    });
+  });
+
+  describe("不正な操作のとき", () => {
+    it("人数不足で CONFIRMED に直接遷移しようとすると exit 2 + 日本語エラー", () => {
+      // 別チームを建てる
+      const tR = runMound(
+        ["team", "create", "--name", "別チーム", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+
+      const gR = runMound(
+        [
+          "game",
+          "create",
+          "--team",
+          team.id,
+          "--title",
+          "人数不足の試合",
+          "--min-players",
+          "9",
+          "--json",
+        ],
+        env,
+      );
+      const game = parseJson<{ id: string }>(gR.stdout);
+
+      // メンバーは 0 人。COLLECTING に進めてから CONFIRMED を試みる
+      runMound(
+        ["game", "transition", game.id, "--to", "COLLECTING", "--json"],
+        env,
+      );
+      const r = runMound(
+        ["game", "transition", game.id, "--to", "CONFIRMED", "--json"],
+        env,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("最低人数");
+    });
+
+    it("不正な状態への遷移は拒否する", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "テストC", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      const gR = runMound(
+        ["game", "create", "--team", team.id, "--title", "テスト", "--json"],
+        env,
+      );
+      const game = parseJson<{ id: string }>(gR.stdout);
+      const r = runMound(
+        ["game", "transition", game.id, "--to", "SETTLED", "--json"],
+        env,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("状態遷移が不正です");
+    });
+  });
+
+  afterAll(() => {
+    rmSync(dbDir, { recursive: true, force: true });
+  });
+});
