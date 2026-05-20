@@ -31,11 +31,13 @@ mound --help
 git clone https://github.com/susumutomita/mound.git
 cd mound
 make install        # 依存インストール
-make install-local  # bin/mound を $HOME/.local/bin に symlink (PATH 通すだけ)
+make install-local  # dist/local/mound-<host> を ~/.local/share/mound に配置 + ~/.local/bin/mound に symlink
 mound --version
 ```
 
-別の場所に置きたいなら `make install-local INSTALL_DIR=/opt/homebrew/bin` のように上書き。`make uninstall-local` で symlink を削除できる。`make cli-build` 単体だと `bin/mound` のみで PATH には乗らない。
+`make cli-build` 単体だと `dist/local/mound-<host>/` のみ生成して PATH には乗せない。`INSTALL_PREFIX` で行き先変更可(`make install-local INSTALL_PREFIX=/opt/homebrew`)。`make uninstall-local` で削除。
+
+> **配布の仕組み:** Bun の `bun build --compile` は libsql の native binding (`@libsql/<platform>/index.node`) を埋め込めない (`@neon-rs/load` が動的 require を使うため)。よって配布物は `bin/mound` (shell launcher) + `libexec/mound/{bun,mound.js,node_modules}` の構造になっており、launcher が Bun runtime + JS bundle + libsql native を組み合わせて実行する。
 
 ## クイックスタート
 
