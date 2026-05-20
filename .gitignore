@@ -10,6 +10,11 @@ build/
 bin/
 dist/
 
+# Swift Package Manager
+**/.build/
+**/.swiftpm/
+**/Package.resolved
+
 # env
 .env
 .env*.local

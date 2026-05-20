@@ -42,7 +42,10 @@
       ".claude",
       "bun.lock",
       "*.config.ts",
-      "*.config.mjs"
+      "*.config.mjs",
+      "**/.build/**",
+      "**/*.swift",
+      "**/*.plist"
     ]
   }
 }
