@@ -20,12 +20,50 @@
 set -euo pipefail
 
 PLATFORM="${1:?platform required (macos-arm64 etc.)}"
-BUN_BIN="${2:?bun runtime path required}"
+BUN_BIN_INPUT="${2:?bun runtime path required}"
 OUT_DIR="${3:?out dir required}"
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ENTRY="$REPO_ROOT/packages/cli/src/index.ts"
 LAUNCHER="$REPO_ROOT/packages/cli/scripts/mound-launcher.sh"
+
+# Resolve the *real* Bun executable. `command -v bun` may return a wrapper
+# script (e.g., safe-chain's shim in CI), which is useless for distribution.
+# Walk symlinks, then if the result is a text/script try standard install
+# locations exported by setup-bun.
+resolve_bun() {
+  local bun="$1"
+  # Resolve symlinks if possible
+  if command -v readlink >/dev/null 2>&1; then
+    local resolved
+    resolved=$(readlink -f "$bun" 2>/dev/null || true)
+    if [ -n "$resolved" ] && [ -x "$resolved" ]; then
+      bun="$resolved"
+    fi
+  fi
+  # If it's binary, accept it.
+  if file "$bun" 2>/dev/null | grep -qE "ELF|Mach-O"; then
+    echo "$bun"
+    return 0
+  fi
+  # Otherwise, look at known install locations.
+  for candidate in \
+    "${BUN_INSTALL:-}/bin/bun" \
+    "${HOME:-}/.bun/bin/bun" \
+    /usr/local/bin/bun \
+    /opt/bun/bin/bun
+  do
+    if [ -x "$candidate" ] && file "$candidate" 2>/dev/null | grep -qE "ELF|Mach-O"; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  echo "FATAL: could not resolve a real Bun binary (input was '$1', neither it nor any known path is ELF/Mach-O)" >&2
+  exit 1
+}
+
+BUN_BIN=$(resolve_bun "$BUN_BIN_INPUT")
+echo "Using Bun binary: $BUN_BIN ($(file "$BUN_BIN" | awk -F: '{print $2}' | head -c 60))"
 
 ROOT="$OUT_DIR/mound-$PLATFORM"
 rm -rf "$ROOT"
@@ -67,7 +105,19 @@ case "$PLATFORM" in
   linux-x86_64)  NATIVE_PKG="@libsql/linux-x64-gnu" ;;
   *) echo "unknown platform: $PLATFORM" >&2; exit 1 ;;
 esac
+if [ ! -d "$NM/$NATIVE_PKG" ]; then
+  echo "FATAL: $NM/$NATIVE_PKG not found in node_modules. bun install did not provide the optional native binding for this platform." >&2
+  echo "Contents of $NM/@libsql/:" >&2
+  ls -la "$NM/@libsql/" 2>&1 >&2 || echo "  (no @libsql dir)" >&2
+  exit 1
+fi
 copy_pkg "$NM/$NATIVE_PKG" "$PKG_DEST/$NATIVE_PKG"
+
+if [ ! -f "$PKG_DEST/$NATIVE_PKG/index.node" ]; then
+  echo "FATAL: $PKG_DEST/$NATIVE_PKG/index.node missing after copy" >&2
+  ls -la "$PKG_DEST/$NATIVE_PKG/" 2>&1 >&2 || true
+  exit 1
+fi
 
 # libsql wrapper + @neon-rs/load
 copy_pkg "$NM/libsql" "$PKG_DEST/libsql"
@@ -89,3 +139,7 @@ EOF
 
 echo "✅ built $ROOT"
 du -sh "$ROOT" 2>/dev/null || true
+echo "--- libexec/mound/node_modules tree (top-level @libsql) ---"
+ls -la "$PKG_DEST/@libsql/" 2>&1 || true
+echo "--- @neon-rs ---"
+ls -la "$PKG_DEST/@neon-rs/" 2>&1 || true
