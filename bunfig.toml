@@ -1,0 +1,6 @@
+[install]
+# Hoisted linker keeps all transitive deps at the top of node_modules/.
+# We rely on this layout in scripts/build-dist.sh, which copies the
+# platform-specific @libsql native binding (and the libsql / @neon-rs glue)
+# from node_modules/ into each tarball's libexec/mound/node_modules/.
+linker = "hoisted"
