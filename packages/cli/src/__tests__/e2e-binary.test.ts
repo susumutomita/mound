@@ -1,22 +1,17 @@
-// 実バイナリを spawn して Phase 1 ループを最初から最後まで走らせる e2e シナリオテスト。
-// bin/mound が無いときは `make cli-build` で生成する。
-import { execFileSync, spawnSync } from "node:child_process";
+// CLI を subprocess で起動して Phase 1 ループを最初から最後まで走らせる e2e シナリオ。
+// `bun packages/cli/src/index.ts` 経由でソースモード実行する (--compile した bin/mound は
+// libsql の native binding を埋め込めず単独動作しないため、CI ではソースモードを使う)。
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const repoRoot = resolve(__dirname, "../../../..");
-const binary = resolve(repoRoot, "bin/mound");
-
-function ensureBinary(): void {
-  if (existsSync(binary)) return;
-  // ローカルで一度ビルドしておく
-  execFileSync("make", ["cli-build"], { cwd: repoRoot, stdio: "inherit" });
-  if (!existsSync(binary)) {
-    throw new Error(`bin/mound build failed: ${binary} not found`);
-  }
-}
+const entry = resolve(repoRoot, "packages/cli/src/index.ts");
+const bunPath = process.env.BUN_INSTALL
+  ? join(process.env.BUN_INSTALL, "bin/bun")
+  : "bun";
 
 interface RunResult {
   code: number;
@@ -29,10 +24,10 @@ function runMound(
   env: Record<string, string>,
   opts: { timeout?: number } = {},
 ): RunResult {
-  const r = spawnSync(binary, args, {
+  const r = spawnSync(bunPath, [entry, ...args], {
     env: { ...process.env, ...env },
     encoding: "utf-8",
-    timeout: opts.timeout ?? 15000,
+    timeout: opts.timeout ?? 30000,
   });
   return {
     code: r.status ?? -1,
@@ -47,12 +42,11 @@ function parseJson<T>(out: string): T {
   return JSON.parse(trimmed) as T;
 }
 
-describe("e2e: bin/mound を実際に spawn する Phase 1 シナリオ", () => {
+describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
   let dbDir: string;
   let env: Record<string, string>;
 
   beforeAll(() => {
-    ensureBinary();
     dbDir = mkdtempSync(join(tmpdir(), "mound-e2e-"));
     env = { MOUND_DB_URL: `file:${join(dbDir, "deep", "mound.db")}` };
   });
