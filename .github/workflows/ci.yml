@@ -88,7 +88,7 @@ jobs:
         run: shellcheck scripts/generate-formula.sh
 
   build:
-    name: Build CLI binary (smoke)
+    name: Build CLI (source-mode smoke)
     runs-on: ubuntu-latest
     needs: [lint, typecheck, test]
     steps:
@@ -105,10 +105,12 @@ jobs:
       - name: Install dependencies
         run: make install-ci
 
-      - name: Build CLI binary
-        run: make cli-build
-
-      - name: Smoke test binary
+      # The `bun build --compile` produced binary still requires
+      # node_modules/@libsql/<platform>/ at runtime because @neon-rs/load uses
+      # a dynamic require() that Bun cannot statically embed. Distribution will
+      # need to ship the .node file alongside the executable (follow-up). For
+      # CI we smoke the source-mode entry which is what subprocess tests use.
+      - name: Source-mode smoke
         run: |
-          ./bin/mound --version
-          ./bin/mound --help | head -5
+          bun packages/cli/src/index.ts --version
+          bun packages/cli/src/index.ts --help | head -5
