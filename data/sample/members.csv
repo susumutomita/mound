@@ -1,6 +1,0 @@
-team_id,name,tier,role,email,positions_json,jersey_number,status
-00000000-0000-0000-0000-000000000001,田中 太郎,PRO,ADMIN,tanaka@example.com,"[""P"",""1B""]",1,ACTIVE
-00000000-0000-0000-0000-000000000001,鈴木 一郎,PRO,MEMBER,suzuki@example.com,"[""SS"",""2B""]",6,ACTIVE
-00000000-0000-0000-0000-000000000001,佐藤 健太,PRO,MEMBER,sato@example.com,"[""C""]",2,ACTIVE
-00000000-0000-0000-0000-000000000001,山本 大輔,LITE,MEMBER,yamamoto@example.com,"[""CF"",""LF""]",8,ACTIVE
-00000000-0000-0000-0000-000000000001,伊藤 翔,PRO,MEMBER,ito@example.com,"[""3B"",""RF""]",5,ACTIVE
