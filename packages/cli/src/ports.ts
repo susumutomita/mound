@@ -54,9 +54,16 @@ export interface GroundSlotFilter {
   dateIso?: string;
 }
 
+export interface GroundSlotDiffFilter extends GroundSlotFilter {
+  // 「この時刻以降に first_seen された slot」だけを返す。
+  // ISO8601 文字列で SQL の文字列比較 (created_at TEXT) と整合させる。
+  since: string;
+}
+
 export interface GroundSlotRepository {
   upsert(slot: GroundSlot): Promise<GroundSlot>;
   list(filter: GroundSlotFilter): Promise<GroundSlot[]>;
+  listNewerThan(filter: GroundSlotDiffFilter): Promise<GroundSlot[]>;
   getByKey(slotKey: string): Promise<GroundSlot | null>;
 }
 

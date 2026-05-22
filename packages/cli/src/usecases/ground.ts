@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { GroundSlot } from "../domain/types";
-import type { GroundSlotFilter, UseCaseContext } from "../ports";
+import type {
+  GroundSlotDiffFilter,
+  GroundSlotFilter,
+  UseCaseContext,
+} from "../ports";
 
 // ground-reservation (susumutomita/ground-reservation) の `--json` 出力 schema。
 // 破壊的変更が必要になったら schema_version を上げる。
@@ -111,4 +115,14 @@ export async function listGroundSlots(
   filter: GroundSlotFilter,
 ): Promise<GroundSlot[]> {
   return ctx.repo.groundSlots.list(filter);
+}
+
+// 「直近キャンセル候補」を返す: first_seen_at >= since の slot を抽出する。
+// 連続スクレイプで初めて観測された枠 = 誰かがキャンセルして空いた可能性が高い。
+// since は ISO8601 (例: "2026-05-22T09:00:00.000Z")。
+export async function detectNewSlots(
+  ctx: UseCaseContext,
+  filter: GroundSlotDiffFilter,
+): Promise<GroundSlot[]> {
+  return ctx.repo.groundSlots.listNewerThan(filter);
 }

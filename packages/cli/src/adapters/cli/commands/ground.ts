@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import type { UseCaseContext } from "../../../ports";
 import {
+  detectNewSlots,
   importGroundAvailability,
   listGroundSlots,
 } from "../../../usecases/ground";
 import { type ParsedArgs, UsageError, boolFlag, optionalFlag } from "../args";
 import { type RenderOptions, emit, formatRows } from "../output";
+import { parseOrUsage } from "../zod-helper";
 
 export async function runGround(
   args: ParsedArgs,
@@ -13,9 +16,10 @@ export async function runGround(
   opts: RenderOptions,
 ): Promise<void> {
   const sub = args.positional[0];
-  if (!sub) throw new UsageError("使い方: mound ground <import|list>");
+  if (!sub) throw new UsageError("使い方: mound ground <import|list|diff>");
   if (sub === "import") return importCommand(args, ctx, opts);
   if (sub === "list") return listCommand(args, ctx, opts);
+  if (sub === "diff") return diffCommand(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: ground ${sub}`);
 }
 
@@ -92,4 +96,59 @@ async function listCommand(
     ]),
     opts,
   );
+}
+
+const minutesInput = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(60 * 24 * 30);
+
+// --since と --minutes を排他に処理し、since の ISO8601 を返す。
+function resolveSince(args: ParsedArgs, now: Date): string {
+  const sinceFlag = optionalFlag(args.flags, "since");
+  const minutesFlag = optionalFlag(args.flags, "minutes");
+  if (sinceFlag && minutesFlag) {
+    throw new UsageError("--since と --minutes は同時指定できません");
+  }
+  if (sinceFlag) {
+    const parsed = new Date(sinceFlag);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new UsageError(
+        "--since は ISO8601 形式 (例: 2026-05-22T09:00:00Z) を指定してください",
+      );
+    }
+    return parsed.toISOString();
+  }
+  const minutes = minutesFlag ? parseOrUsage(minutesInput, minutesFlag) : 60;
+  return new Date(now.getTime() - minutes * 60_000).toISOString();
+}
+
+async function diffCommand(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const since = resolveSince(args, ctx.now());
+  const slots = await detectNewSlots(ctx, {
+    since,
+    source: optionalFlag(args.flags, "source"),
+    dateIso: optionalFlag(args.flags, "game-date"),
+  });
+  const result = { since, count: slots.length, slots };
+  const text =
+    slots.length === 0
+      ? `since ${since} 以降の新規空きはありません`
+      : [
+          `since ${since} 以降に検出された空き: ${slots.length} 件`,
+          formatRows(slots, [
+            "source",
+            "facility_name",
+            "date_iso",
+            "time_range",
+            "status",
+            "first_seen_at",
+          ]),
+        ].join("\n");
+  emit(result, text, opts);
 }
