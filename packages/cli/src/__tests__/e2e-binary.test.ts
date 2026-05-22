@@ -466,6 +466,153 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       );
       expect(r.code).toBe(2);
     });
+
+    it("ground sync が --bin で渡したスクリプトの出力を取り込む", () => {
+      const mockBin = join(dbDir, "fake-ground-monitoring.sh");
+      const payload = {
+        schema_version: 1,
+        scraped_at: "2026-05-23T18:00:00+09:00",
+        regions: [
+          {
+            region: "yokohama",
+            records: [
+              {
+                region: "yokohama",
+                facility_name: "syncテスト公園",
+                date_raw: "令和8年7月1日(日)",
+                date_iso: "2026-07-01",
+                time_range: "09:00-12:00",
+                status: null,
+                raw: "\n令和8年7月1日(日) 09:00-12:00 syncテスト公園",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      writeFileSync(
+        mockBin,
+        `#!/usr/bin/env bash
+cat <<'JSON'
+${JSON.stringify(payload)}
+JSON
+`,
+        { mode: 0o755 },
+      );
+
+      const r = runMound(
+        ["ground", "sync", "--region", "yokohama", "--bin", mockBin, "--json"],
+        env,
+      );
+      expect(r.code).toBe(0);
+      const out = parseJson<{
+        total_records: number;
+        inserted: number;
+        new_slots: Array<{ facility_name: string }>;
+      }>(r.stdout);
+      expect(out.total_records).toBe(1);
+      expect(out.inserted).toBe(1);
+      expect(
+        out.new_slots.some((s) => s.facility_name === "syncテスト公園"),
+      ).toBe(true);
+    });
+
+    it("ground sync が exit non-zero のスクリプトでは exit 1", () => {
+      const mockBin = join(dbDir, "fake-ground-monitoring-fail.sh");
+      writeFileSync(
+        mockBin,
+        '#!/usr/bin/env bash\necho "scraper failed" >&2\nexit 3\n',
+        { mode: 0o755 },
+      );
+      const r = runMound(["ground", "sync", "--bin", mockBin, "--json"], env);
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain("exit 3");
+    });
+
+    it("ground sync --notify --team で新規 slot が log-only sender に流れる", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "sync 通知テスト", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      runMound(
+        [
+          "notify",
+          "add",
+          "--team",
+          team.id,
+          "--kind",
+          "DISCORD",
+          "--webhook",
+          "https://discord.com/api/webhooks/dummy",
+          "--json",
+        ],
+        env,
+      );
+
+      const mockBin = join(dbDir, "fake-ground-monitoring-notify.sh");
+      const payload = {
+        schema_version: 1,
+        scraped_at: "2026-05-24T18:00:00+09:00",
+        regions: [
+          {
+            region: "kanagawa",
+            records: [
+              {
+                region: "kanagawa",
+                facility_name: "通知トリガ球場",
+                date_raw: "2026/08/10",
+                date_iso: "2026-08-10",
+                time_range: "13:00-17:00",
+                status: "空き",
+                raw: "\n2026/08/10 13:00-17:00 空き 通知トリガ球場",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      writeFileSync(
+        mockBin,
+        `#!/usr/bin/env bash\ncat <<'JSON'\n${JSON.stringify(payload)}\nJSON\n`,
+        { mode: 0o755 },
+      );
+
+      const r = runMound(
+        [
+          "ground",
+          "sync",
+          "--region",
+          "kanagawa",
+          "--bin",
+          mockBin,
+          "--notify",
+          "--team",
+          team.id,
+          "--json",
+        ],
+        env,
+      );
+      expect(r.code).toBe(0);
+      const out = parseJson<{
+        new_slots: unknown[];
+        notifications: Array<{ ok: boolean }>;
+      }>(r.stdout);
+      expect(out.new_slots.length).toBeGreaterThan(0);
+      expect(out.notifications.length).toBe(1);
+      expect(out.notifications[0]?.ok).toBe(true);
+      expect(r.stderr).toContain("[notify:DISCORD]");
+      expect(r.stderr).toContain("通知トリガ球場");
+    });
+
+    it("ground sync --notify には --team が必要 (exit 2)", () => {
+      const r = runMound(
+        ["ground", "sync", "--notify", "--bin", "/bin/true", "--json"],
+        env,
+      );
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("--team");
+    });
   });
 
   describe("notify チャネル管理のとき", () => {

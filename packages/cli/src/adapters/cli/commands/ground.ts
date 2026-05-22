@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import type { UseCaseContext } from "../../../ports";
@@ -17,10 +18,12 @@ export async function runGround(
   opts: RenderOptions,
 ): Promise<void> {
   const sub = args.positional[0];
-  if (!sub) throw new UsageError("使い方: mound ground <import|list|diff>");
+  if (!sub)
+    throw new UsageError("使い方: mound ground <import|list|diff|sync>");
   if (sub === "import") return importCommand(args, ctx, opts);
   if (sub === "list") return listCommand(args, ctx, opts);
   if (sub === "diff") return diffCommand(args, ctx, opts);
+  if (sub === "sync") return syncCommand(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: ground ${sub}`);
 }
 
@@ -123,6 +126,86 @@ function resolveSince(args: ParsedArgs, now: Date): string {
   }
   const minutes = minutesFlag ? parseOrUsage(minutesInput, minutesFlag) : 60;
   return new Date(now.getTime() - minutes * 60_000).toISOString();
+}
+
+const timeoutInput = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(10 * 60 * 1000);
+
+async function syncCommand(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const region = optionalFlag(args.flags, "region") ?? "all";
+  const bin = optionalFlag(args.flags, "bin") ?? "ground-monitoring";
+  const timeoutFlag = optionalFlag(args.flags, "timeout-ms");
+  const timeout = timeoutFlag
+    ? parseOrUsage(timeoutInput, timeoutFlag)
+    : 60_000;
+  const shouldNotify = boolFlag(args.flags, "notify");
+  const teamId = optionalFlag(args.flags, "team");
+  if (shouldNotify && !teamId) {
+    throw new UsageError("--notify を指定したら --team も必要です");
+  }
+
+  // この sync で初めて見る slot は first_seen_at >= beforeSyncAt になるはず。
+  const beforeSyncAt = ctx.now().toISOString();
+
+  // ground-monitoring を spawn して JSON を取る。
+  const result = spawnSync(bin, ["--region", region, "--json"], {
+    encoding: "utf-8",
+    timeout,
+  });
+  if (result.error) {
+    // ENOENT (バイナリ未インストール) もここで包まれる。
+    throw new Error(`scraper 起動に失敗: ${result.error.message}`);
+  }
+  if (result.signal === "SIGTERM") {
+    throw new Error(`scraper がタイムアウトしました (${timeout}ms)`);
+  }
+  if (result.status !== 0) {
+    const stderr = (result.stderr ?? "").trim();
+    throw new Error(
+      `scraper が exit ${result.status} で終了しました${stderr ? `: ${stderr}` : ""}`,
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(result.stdout);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`scraper の stdout が JSON ではありません: ${msg}`);
+  }
+
+  const importResult = await importGroundAvailability(ctx, payload);
+
+  // --notify --team が指定されていれば、この sync で初観測の slot だけ抽出して送る。
+  const newSlots = await detectNewSlots(ctx, { since: beforeSyncAt });
+  let notifications: unknown[] = [];
+  if (shouldNotify && teamId) {
+    notifications = await notifyGroundCancellation(ctx, teamId, newSlots);
+  }
+
+  const out = {
+    region,
+    bin,
+    ...importResult,
+    new_slots: newSlots,
+    ...(shouldNotify ? { notifications } : {}),
+  };
+  const text = [
+    `sync (${bin} --region ${region}) 完了`,
+    `取り込み: ${importResult.total_records} 件 (新規 ${importResult.inserted} / 更新 ${importResult.updated})`,
+    `新規観測 slot: ${newSlots.length} 件`,
+    shouldNotify ? `通知送信: ${notifications.length} 件` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  emit(out, text, opts);
 }
 
 async function diffCommand(
