@@ -4,6 +4,7 @@ import type {
   AuditLog,
   Game,
   GameStatus,
+  GroundSlot,
   Member,
   MemberRsvp,
   Rsvp,
@@ -48,12 +49,24 @@ export interface AuditRepository {
   list(targetType: string, targetId: string): Promise<AuditLog[]>;
 }
 
+export interface GroundSlotFilter {
+  source?: string;
+  dateIso?: string;
+}
+
+export interface GroundSlotRepository {
+  upsert(slot: GroundSlot): Promise<GroundSlot>;
+  list(filter: GroundSlotFilter): Promise<GroundSlot[]>;
+  getByKey(slotKey: string): Promise<GroundSlot | null>;
+}
+
 export interface Repositories {
   teams: TeamRepository;
   members: MemberRepository;
   games: GameRepository;
   rsvps: RsvpRepository;
   audit: AuditRepository;
+  groundSlots: GroundSlotRepository;
 }
 
 export interface Clock {

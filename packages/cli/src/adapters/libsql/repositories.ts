@@ -3,6 +3,7 @@ import type {
   AuditLog,
   Game,
   GameStatus,
+  GroundSlot,
   Member,
   MemberRsvp,
   Rsvp,
@@ -13,6 +14,8 @@ import type {
 import type {
   AuditRepository,
   GameRepository,
+  GroundSlotFilter,
+  GroundSlotRepository,
   MemberRepository,
   Repositories,
   RsvpRepository,
@@ -22,6 +25,7 @@ import type { DbClient } from "./client";
 import {
   rowToAuditLog,
   rowToGame,
+  rowToGroundSlot,
   rowToMember,
   rowToMemberRsvp,
   rowToRsvp,
@@ -298,6 +302,76 @@ class LibsqlAuditRepository implements AuditRepository {
   }
 }
 
+class LibsqlGroundSlotRepository implements GroundSlotRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async upsert(slot: GroundSlot): Promise<GroundSlot> {
+    // first_seen_at は新規挿入時にのみ書き込み、既存行は維持する。
+    await this.db.execute({
+      sql: `INSERT INTO ground_slots (
+              id, slot_key, source, facility_name, date_iso, date_raw,
+              time_range, status, raw, scraped_at, first_seen_at, ingested_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(slot_key) DO UPDATE SET
+              source = excluded.source,
+              facility_name = excluded.facility_name,
+              date_iso = excluded.date_iso,
+              date_raw = excluded.date_raw,
+              time_range = excluded.time_range,
+              status = excluded.status,
+              raw = excluded.raw,
+              scraped_at = excluded.scraped_at,
+              ingested_at = excluded.ingested_at`,
+      args: [
+        slot.id,
+        slot.slot_key,
+        slot.source,
+        slot.facility_name,
+        slot.date_iso,
+        slot.date_raw,
+        slot.time_range,
+        slot.status,
+        slot.raw,
+        slot.scraped_at,
+        slot.first_seen_at,
+        slot.ingested_at,
+      ],
+    });
+    const r = await this.db.execute({
+      sql: "SELECT * FROM ground_slots WHERE slot_key = ?",
+      args: [slot.slot_key],
+    });
+    if (!r.rows[0]) throw new Error("ground_slot upsert failed");
+    return rowToGroundSlot(r.rows[0]);
+  }
+
+  async list(filter: GroundSlotFilter): Promise<GroundSlot[]> {
+    const where: string[] = [];
+    const args: InValue[] = [];
+    if (filter.source) {
+      where.push("source = ?");
+      args.push(filter.source);
+    }
+    if (filter.dateIso) {
+      where.push("date_iso = ?");
+      args.push(filter.dateIso);
+    }
+    const sql = `SELECT * FROM ground_slots${
+      where.length ? ` WHERE ${where.join(" AND ")}` : ""
+    } ORDER BY date_iso ASC, time_range ASC, facility_name ASC`;
+    const r = await this.db.execute({ sql, args });
+    return r.rows.map(rowToGroundSlot);
+  }
+
+  async getByKey(slotKey: string): Promise<GroundSlot | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM ground_slots WHERE slot_key = ?",
+      args: [slotKey],
+    });
+    return r.rows[0] ? rowToGroundSlot(r.rows[0]) : null;
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -305,5 +379,6 @@ export function buildRepositories(db: DbClient): Repositories {
     games: new LibsqlGameRepository(db),
     rsvps: new LibsqlRsvpRepository(db),
     audit: new LibsqlAuditRepository(db),
+    groundSlots: new LibsqlGroundSlotRepository(db),
   };
 }

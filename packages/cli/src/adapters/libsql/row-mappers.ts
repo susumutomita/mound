@@ -7,6 +7,7 @@ import {
 import type {
   AuditLog,
   Game,
+  GroundSlot,
   Member,
   MemberRsvp,
   Rsvp,
@@ -86,5 +87,22 @@ export function rowToAuditLog(row: Row): AuditLog {
     before_json: nullable(row.before_json),
     after_json: nullable(row.after_json),
     created_at: str(row.created_at),
+  };
+}
+
+export function rowToGroundSlot(row: Row): GroundSlot {
+  return {
+    id: str(row.id),
+    slot_key: str(row.slot_key),
+    source: str(row.source),
+    facility_name: str(row.facility_name),
+    date_iso: nullable(row.date_iso),
+    date_raw: str(row.date_raw),
+    time_range: nullable(row.time_range),
+    status: nullable(row.status),
+    raw: str(row.raw),
+    scraped_at: str(row.scraped_at),
+    first_seen_at: str(row.first_seen_at),
+    ingested_at: str(row.ingested_at),
   };
 }

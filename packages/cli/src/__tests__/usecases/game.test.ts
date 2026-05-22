@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AuditLog,
   Game,
+  GroundSlot,
   Member,
   MemberRsvp,
   Rsvp,
@@ -14,6 +15,7 @@ import type {
 import type {
   AuditRepository,
   GameRepository,
+  GroundSlotRepository,
   MemberRepository,
   Repositories,
   RsvpRepository,
@@ -30,6 +32,7 @@ interface Fake {
   gameStore: Map<string, Game>;
   rsvpStore: Map<string, Rsvp>;
   auditStore: AuditLog[];
+  groundStore: Map<string, GroundSlot>;
   repo: Repositories;
 }
 
@@ -147,13 +150,29 @@ function buildFake(): Fake {
       ),
   };
 
+  const groundStore = new Map<string, GroundSlot>();
+  const groundSlots: GroundSlotRepository = {
+    upsert: async (s) => {
+      groundStore.set(s.slot_key, s);
+      return s;
+    },
+    list: async (filter) =>
+      Array.from(groundStore.values()).filter(
+        (s) =>
+          (!filter.source || s.source === filter.source) &&
+          (!filter.dateIso || s.date_iso === filter.dateIso),
+      ),
+    getByKey: async (slotKey) => groundStore.get(slotKey) ?? null,
+  };
+
   return {
     teamStore,
     memberStore,
     gameStore,
     rsvpStore,
     auditStore,
-    repo: { teams, members, games, rsvps, audit },
+    groundStore,
+    repo: { teams, members, games, rsvps, audit, groundSlots },
   };
 }
 

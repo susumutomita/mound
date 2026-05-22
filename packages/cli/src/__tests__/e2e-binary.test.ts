@@ -2,7 +2,7 @@
 // `bun packages/cli/src/index.ts` 経由でソースモード実行する (--compile した bin/mound は
 // libsql の native binding を埋め込めず単独動作しないため、CI ではソースモードを使う)。
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -287,6 +287,75 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       expect(errJson.available_transitions).toEqual(
         expect.arrayContaining(["COLLECTING", "CONFIRMED", "CANCELLED"]),
       );
+    });
+  });
+
+  describe("ground import / list (ground-reservation 連携) のとき", () => {
+    it("--file から JSON を取り込み list で読み出せる", () => {
+      const payload = {
+        schema_version: 1,
+        scraped_at: "2026-05-22T18:00:00+09:00",
+        regions: [
+          {
+            region: "yokohama",
+            records: [
+              {
+                region: "yokohama",
+                facility_name: "e2eテスト公園",
+                date_raw: "令和6年6月1日(土)",
+                date_iso: "2026-06-01",
+                time_range: "09:00-12:00",
+                status: null,
+                raw: "\n令和6年6月1日(土) 09:00-12:00 e2eテスト公園",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      const jsonPath = join(dbDir, "ground-import.json");
+      writeFileSync(jsonPath, JSON.stringify(payload));
+
+      const importR = runMound(
+        ["ground", "import", "--file", jsonPath, "--json"],
+        env,
+      );
+      expect(importR.code).toBe(0);
+      const summary = parseJson<{
+        total_records: number;
+        inserted: number;
+        updated: number;
+      }>(importR.stdout);
+      expect(summary.total_records).toBe(1);
+      expect(summary.inserted).toBe(1);
+
+      const listR = runMound(
+        ["ground", "list", "--source", "yokohama", "--json"],
+        env,
+      );
+      expect(listR.code).toBe(0);
+      const slots = parseJson<
+        Array<{ source: string; facility_name: string; first_seen_at: string }>
+      >(listR.stdout);
+      expect(slots).toHaveLength(1);
+      expect(slots[0]?.facility_name).toBe("e2eテスト公園");
+
+      // 2 回目の取り込みは inserted=0 / updated=1 になる (first_seen_at を維持)
+      const importR2 = runMound(
+        ["ground", "import", "--file", jsonPath, "--json"],
+        env,
+      );
+      expect(importR2.code).toBe(0);
+      const summary2 = parseJson<{ inserted: number; updated: number }>(
+        importR2.stdout,
+      );
+      expect(summary2.inserted).toBe(0);
+      expect(summary2.updated).toBe(1);
+    });
+
+    it("--file も --stdin も無いと exit 2", () => {
+      const r = runMound(["ground", "import", "--json"], env);
+      expect(r.code).toBe(2);
     });
   });
 

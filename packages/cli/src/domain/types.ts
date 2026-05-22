@@ -92,3 +92,23 @@ export interface RsvpBreakdown {
   maybe: MemberRsvp[];
   no_response: MemberRsvp[];
 }
+
+// 外部スクレイパ (ground-reservation 等) から ingest した 1 件の空き枠。
+// slot_key = source|facility_name|date_iso|time_range (UNIQUE)
+//   ingest 時にこのキーで upsert する。
+// first_seen_at = 最初に観測した時刻 (新規 vs 継続を後から見るため)。
+// ingested_at   = 直近の取り込み時刻。
+export interface GroundSlot {
+  id: string;
+  slot_key: string;
+  source: string;
+  facility_name: string;
+  date_iso: string | null;
+  date_raw: string;
+  time_range: string | null;
+  status: string | null;
+  raw: string;
+  scraped_at: string;
+  first_seen_at: string;
+  ingested_at: string;
+}

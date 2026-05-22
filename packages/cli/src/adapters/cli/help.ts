@@ -18,6 +18,8 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   rsvp summary --game <ID>
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
+  ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
+  ground list [--source S] [--date YYYY-MM-DD]
 
 サブコマンドの詳細:
   mound <command> [subcommand] --help        例: mound game create --help
@@ -283,6 +285,55 @@ JSON 出力:
 
 JSON 出力:
   AuditLog[] { id, actor, action, target_type, target_id, before_json, after_json, created_at }
+`,
+
+  ground: `mound ground — 外部スクレイパ (ground-reservation 等) との接続
+
+サブコマンド:
+  ground import [--file PATH | --stdin] [--json]
+  ground list   [--source S] [--date YYYY-MM-DD] [--json]
+
+詳細:
+  mound ground import --help
+  mound ground list --help
+`,
+
+  "ground import": `mound ground import — 外部スクレイパの JSON を取り込む
+
+使い方:
+  mound ground import --file <PATH> [--json]
+  mound ground import --stdin       [--json]
+
+説明:
+  susumutomita/ground-reservation の \`ground-monitoring --json\` 出力を読み込み、
+  ground_slots テーブルに upsert する。(source, facility_name, date_iso,
+  time_range) のキーで一意。新規行のみ first_seen_at に取り込み時刻を入れる。
+
+JSON 出力:
+  {
+    "scraped_at": ISO8601,
+    "total_records": number,
+    "inserted": number,
+    "updated": number,
+    "regions_with_errors": [{ "region": string, "errors": string[] }]
+  }
+
+エラー:
+  - UsageError: --file / --stdin 未指定、JSON 不正、schema 不一致 (exit 2)
+`,
+
+  "ground list": `mound ground list — 取り込み済みの空き枠を表示
+
+使い方:
+  mound ground list [--source <SOURCE>] [--date YYYY-MM-DD] [--json]
+
+フラグ:
+  --source  (任意) スクレイパ source ID (yokohama, kanagawa, ...)
+  --date    (任意) 日付 (YYYY-MM-DD) で絞り込み
+
+JSON 出力:
+  GroundSlot[] { id, slot_key, source, facility_name, date_iso, date_raw,
+                 time_range, status, raw, scraped_at, first_seen_at, ingested_at }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

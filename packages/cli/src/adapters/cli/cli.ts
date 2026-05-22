@@ -25,6 +25,7 @@ import { TransitionDeniedError } from "../../usecases/errors";
 import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
 import { runGame } from "./commands/game";
+import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
 import { runMember } from "./commands/member";
 import { runRsvp } from "./commands/rsvp";
@@ -106,6 +107,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "agenda":
         await runAgenda(subArgs, ctx, renderOpts);
+        return 0;
+      case "ground":
+        await runGround(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });
