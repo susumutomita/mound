@@ -106,6 +106,16 @@ async function show(
     detail.available_transitions.length === 0
       ? "(終端)"
       : detail.available_transitions.join(" | ");
+  const matchingText =
+    detail.matching_ground_slots.length === 0
+      ? "整合する空き枠: (なし — 取り込み済み slot に同日同会場のものなし)"
+      : [
+          `整合する空き枠: ${detail.matching_ground_slots.length} 件`,
+          ...detail.matching_ground_slots.map(
+            (slot) =>
+              `  - ${slot.source} ${slot.facility_name} ${slot.time_range ?? ""} ${slot.status ?? ""}`,
+          ),
+        ].join("\n");
   const text = [
     `${game.title} [${game.status}]`,
     `id: ${game.id}`,
@@ -120,6 +130,7 @@ async function show(
     `  未定:     ${names(b.maybe)}`,
     `  未回答:   ${names(b.no_response)}`,
     `次の遷移: ${transitions}`,
+    matchingText,
   ].join("\n");
   emit(detail, text, opts);
 }
