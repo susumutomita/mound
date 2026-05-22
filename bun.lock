@@ -28,6 +28,20 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/ground-scraper": {
+      "name": "@match-engine/ground-scraper",
+      "version": "0.1.0",
+      "bin": {
+        "mound-ground-scraper": "./src/index.ts",
+      },
+      "dependencies": {
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+        "typescript": "^5.9.3",
+      },
+    },
   },
   "trustedDependencies": [
     "@biomejs/biome",
@@ -86,6 +100,8 @@
     "@libsql/win32-x64-msvc": ["@libsql/win32-x64-msvc@0.5.29", "", { "os": "win32", "cpu": "x64" }, "sha512-4/0CvEdhi6+KjMxMaVbFM2n2Z44escBRoEYpR+gZg64DdetzGnYm8mcNLcoySaDJZNaBd6wz5DNdgRmcI4hXcg=="],
 
     "@match-engine/cli": ["@match-engine/cli@workspace:packages/cli"],
+
+    "@match-engine/ground-scraper": ["@match-engine/ground-scraper@workspace:packages/ground-scraper"],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.2", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-sNXv5oLJ7ob93xkZ1XnxisYhGYXfaG9f65/ZgYuAu3qt7b3NadcOEhLvx28hv31PgX8SZJRYrAIPQilQmFpLVw=="],
 
