@@ -496,6 +496,122 @@ describe("showGame use case", () => {
     });
   });
 
+  describe("game_date と ground_name が揃っているとき", () => {
+    it("matching_ground_slots に同日 + ground_name 部分一致の slot だけ載る", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "練習試合",
+        status: "CONFIRMED",
+        game_date: "2026-06-01",
+        ground_name: "三ツ沢",
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      // 取り込み済み slot を 3 件入れて、うち 1 件だけマッチさせる
+      const baseSlot = {
+        source: "yokohama",
+        date_iso: "2026-06-01",
+        date_raw: "x",
+        time_range: "09:00-12:00",
+        status: null,
+        raw: "",
+        scraped_at: "x",
+        first_seen_at: "x",
+        ingested_at: "x",
+      };
+      await fake.repo.groundSlots.upsert({
+        id: "s1",
+        slot_key: "k1",
+        ...baseSlot,
+        facility_name: "三ツ沢公園球技場",
+      });
+      // 別日付なので除外
+      await fake.repo.groundSlots.upsert({
+        id: "s2",
+        slot_key: "k2",
+        ...baseSlot,
+        date_iso: "2026-06-02",
+        facility_name: "三ツ沢公園球技場",
+      });
+      // 名前不一致なので除外
+      await fake.repo.groundSlots.upsert({
+        id: "s3",
+        slot_key: "k3",
+        ...baseSlot,
+        facility_name: "岸根公園球技場",
+      });
+
+      const detail = await showGame(ctx, "g");
+      expect(detail.matching_ground_slots).toHaveLength(1);
+      expect(detail.matching_ground_slots[0]?.id).toBe("s1");
+    });
+  });
+
+  describe("game_date が null のとき", () => {
+    it("matching_ground_slots は空配列", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "DRAFT",
+        game_date: null,
+        ground_name: "三ツ沢",
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      const detail = await showGame(ctx, "g");
+      expect(detail.matching_ground_slots).toEqual([]);
+    });
+  });
+
+  describe("ground_name が null のとき", () => {
+    it("matching_ground_slots は空配列", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "CONFIRMED",
+        game_date: "2026-06-01",
+        ground_name: null,
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      const detail = await showGame(ctx, "g");
+      expect(detail.matching_ground_slots).toEqual([]);
+    });
+  });
+
   describe("終端 (SETTLED) のとき", () => {
     it("available_transitions は空配列", async () => {
       const { ctx, fake } = createCtx();

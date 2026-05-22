@@ -22,6 +22,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   ground list [--source S] [--date YYYY-MM-DD]
   ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
   ground sync [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T]
+  ground match --game <GAME_ID>              試合の date+会場に合う空きを列挙
   notify add --team <ID> --kind DISCORD|SLACK|LINE --webhook <URL> [--secret S] [--target T] [--label L]
   notify list --team <ID>
   notify remove <ID>
@@ -307,12 +308,14 @@ JSON 出力:
   ground list   [--source S] [--date YYYY-MM-DD] [--json]
   ground diff   [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD] [--json]
   ground sync   [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T] [--json]
+  ground match  --game <GAME_ID> [--json]
 
 詳細:
   mound ground import --help
   mound ground list --help
   mound ground diff --help
   mound ground sync --help
+  mound ground match --help
 `,
 
   "ground import": `mound ground import — 外部スクレイパの JSON を取り込む
@@ -373,6 +376,28 @@ JSON 出力:
     "new_slots": GroundSlot[],
     "notifications"?: NotificationDeliveryResult[]
   }
+`,
+
+  "ground match": `mound ground match — 試合の日付・会場に整合する空き枠を列挙
+
+使い方:
+  mound ground match --game <GAME_ID> [--json]
+
+挙動:
+  game.game_date と game.ground_name を使い、同日かつ facility_name に
+  ground_name を部分文字列として含む ground_slots を返す。どちらかが
+  null の場合は空配列。
+
+JSON 出力:
+  {
+    "game": Game,
+    "count": number,
+    "matching_slots": GroundSlot[]
+  }
+
+エラー:
+  - GameNotFoundError: 該当 game なし (exit 2)
+  - UsageError: --game 未指定 (exit 2)
 `,
 
   "ground diff": `mound ground diff — 直近キャンセル候補 (新規観測 slot) を抽出

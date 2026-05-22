@@ -2,13 +2,21 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import type { UseCaseContext } from "../../../ports";
+import { GameNotFoundError } from "../../../usecases/errors";
 import {
   detectNewSlots,
+  findSlotsMatchingGame,
   importGroundAvailability,
   listGroundSlots,
 } from "../../../usecases/ground";
 import { notifyGroundCancellation } from "../../../usecases/notification";
-import { type ParsedArgs, UsageError, boolFlag, optionalFlag } from "../args";
+import {
+  type ParsedArgs,
+  UsageError,
+  boolFlag,
+  optionalFlag,
+  requireFlag,
+} from "../args";
 import { type RenderOptions, emit, formatRows } from "../output";
 import { parseOrUsage } from "../zod-helper";
 
@@ -19,12 +27,39 @@ export async function runGround(
 ): Promise<void> {
   const sub = args.positional[0];
   if (!sub)
-    throw new UsageError("使い方: mound ground <import|list|diff|sync>");
+    throw new UsageError("使い方: mound ground <import|list|diff|sync|match>");
   if (sub === "import") return importCommand(args, ctx, opts);
   if (sub === "list") return listCommand(args, ctx, opts);
   if (sub === "diff") return diffCommand(args, ctx, opts);
   if (sub === "sync") return syncCommand(args, ctx, opts);
+  if (sub === "match") return matchCommand(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: ground ${sub}`);
+}
+
+async function matchCommand(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const gameId = requireFlag(args.flags, "game");
+  const game = await ctx.repo.games.get(gameId);
+  if (!game) throw new GameNotFoundError(gameId);
+  const slots = await findSlotsMatchingGame(ctx, game);
+  const out = { game, count: slots.length, matching_slots: slots };
+  const text =
+    slots.length === 0
+      ? `${game.title} (${game.game_date ?? "日付未定"} / ${game.ground_name ?? "会場未定"}) に整合する slot はありません`
+      : [
+          `${game.title} (${game.game_date} / ${game.ground_name}) に整合する slot: ${slots.length} 件`,
+          formatRows(slots, [
+            "source",
+            "facility_name",
+            "time_range",
+            "status",
+            "first_seen_at",
+          ]),
+        ].join("\n");
+  emit(out, text, opts);
 }
 
 async function readPayload(args: ParsedArgs): Promise<unknown> {

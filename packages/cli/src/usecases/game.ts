@@ -1,5 +1,10 @@
 import { checkGuard, getAvailableTransitions } from "../domain/state-machine";
-import type { Game, GameStatus, RsvpBreakdown } from "../domain/types";
+import type {
+  Game,
+  GameStatus,
+  GroundSlot,
+  RsvpBreakdown,
+} from "../domain/types";
 import type { UseCaseContext } from "../ports";
 import { writeAuditLog } from "./audit";
 import {
@@ -7,6 +12,7 @@ import {
   TeamNotFoundError,
   TransitionDeniedError,
 } from "./errors";
+import { findSlotsMatchingGame } from "./ground";
 import { notifyGameTransition } from "./notification";
 
 export interface CreateGameInput {
@@ -69,6 +75,9 @@ export interface GameDetail {
   };
   rsvp_breakdown: RsvpBreakdown;
   available_transitions: GameStatus[];
+  // game.game_date と game.ground_name に一致する取り込み済み ground_slots。
+  // どちらかが null なら空配列。詳細は usecases/ground.ts:findSlotsMatchingGame
+  matching_ground_slots: GroundSlot[];
 }
 
 export async function showGame(
@@ -78,6 +87,7 @@ export async function showGame(
   const game = await ctx.repo.games.get(id);
   if (!game) throw new GameNotFoundError(id);
   const breakdown = await ctx.repo.rsvps.breakdown(game.id, game.team_id);
+  const matching = await findSlotsMatchingGame(ctx, game);
   return {
     game,
     rsvp_summary: {
@@ -88,6 +98,7 @@ export async function showGame(
     },
     rsvp_breakdown: breakdown,
     available_transitions: getAvailableTransitions(game.status),
+    matching_ground_slots: matching,
   };
 }
 

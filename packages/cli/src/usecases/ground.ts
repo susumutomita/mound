@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { GroundSlot } from "../domain/types";
+import type { Game, GroundSlot } from "../domain/types";
 import type {
   GroundSlotDiffFilter,
   GroundSlotFilter,
@@ -125,4 +125,21 @@ export async function detectNewSlots(
   filter: GroundSlotDiffFilter,
 ): Promise<GroundSlot[]> {
   return ctx.repo.groundSlots.listNewerThan(filter);
+}
+
+// 指定 game の game_date と ground_name に整合する ground_slots を返す。
+// マッチング規則:
+//   - game.game_date / game.ground_name のどちらか欠けたら空配列
+//   - 同日 (date_iso === game.game_date) かつ
+//     facility_name に game.ground_name を部分文字列として含む slot
+// substring 一致は表記揺れには弱いが、Phase 1 では "公園" と打てば
+// "三ツ沢公園球技場" まで拾える緩めの挙動を狙う。
+export async function findSlotsMatchingGame(
+  ctx: UseCaseContext,
+  game: Game,
+): Promise<GroundSlot[]> {
+  if (!game.game_date || !game.ground_name) return [];
+  const slots = await ctx.repo.groundSlots.list({ dateIso: game.game_date });
+  const needle = game.ground_name;
+  return slots.filter((s) => s.facility_name.includes(needle));
 }

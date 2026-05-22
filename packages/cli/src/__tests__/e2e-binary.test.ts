@@ -735,6 +735,100 @@ JSON
       expect(r.stderr).not.toContain("15:00-18:00");
     });
 
+    it("ground match --game で試合の date/会場に合う slot を取れる + game show にも載る", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "match team", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+
+      // 試合を作る (date と ground_name 込み)
+      const gR = runMound(
+        [
+          "game",
+          "create",
+          "--team",
+          team.id,
+          "--title",
+          "match試合",
+          "--date",
+          "2026-07-15",
+          "--ground",
+          "三ツ沢",
+          "--json",
+        ],
+        env,
+      );
+      const game = parseJson<{ id: string }>(gR.stdout);
+
+      // 同日 + 名前部分一致の slot を 1 つ、不一致を 2 つ import
+      const payload = {
+        schema_version: 1,
+        scraped_at: "2026-05-22T20:00:00+09:00",
+        regions: [
+          {
+            region: "yokohama",
+            records: [
+              {
+                region: "yokohama",
+                facility_name: "三ツ沢公園球技場",
+                date_raw: "2026/07/15",
+                date_iso: "2026-07-15",
+                time_range: "09:00-12:00",
+                status: null,
+                raw: "",
+              },
+              {
+                region: "yokohama",
+                facility_name: "三ツ沢公園球技場",
+                date_raw: "2026/07/16",
+                date_iso: "2026-07-16",
+                time_range: "09:00-12:00",
+                status: null,
+                raw: "",
+              },
+              {
+                region: "yokohama",
+                facility_name: "岸根公園球技場",
+                date_raw: "2026/07/15",
+                date_iso: "2026-07-15",
+                time_range: "09:00-12:00",
+                status: null,
+                raw: "",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      const path = join(dbDir, "match-payload.json");
+      writeFileSync(path, JSON.stringify(payload));
+      runMound(["ground", "import", "--file", path, "--json"], env);
+
+      // mound ground match
+      const mR = runMound(
+        ["ground", "match", "--game", game.id, "--json"],
+        env,
+      );
+      expect(mR.code).toBe(0);
+      const m = parseJson<{
+        count: number;
+        matching_slots: Array<{ facility_name: string }>;
+      }>(mR.stdout);
+      expect(m.count).toBe(1);
+      expect(m.matching_slots[0]?.facility_name).toBe("三ツ沢公園球技場");
+
+      // game show にも matching_ground_slots が乗る
+      const sR = runMound(["game", "show", game.id, "--json"], env);
+      const detail = parseJson<{
+        matching_ground_slots: Array<{ facility_name: string }>;
+      }>(sR.stdout);
+      expect(detail.matching_ground_slots).toHaveLength(1);
+      expect(detail.matching_ground_slots[0]?.facility_name).toBe(
+        "三ツ沢公園球技場",
+      );
+    });
+
     it("watch test --team で現在の slot が watch に合致するか確認できる", () => {
       const tR = runMound(
         ["team", "create", "--name", "watch test cmd", "--json"],
