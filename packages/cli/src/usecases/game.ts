@@ -7,6 +7,7 @@ import {
   TeamNotFoundError,
   TransitionDeniedError,
 } from "./errors";
+import { notifyGameTransition } from "./notification";
 
 export interface CreateGameInput {
   teamId: string;
@@ -125,5 +126,8 @@ export async function transitionGame(
     before,
     after,
   });
+  // 通知は fire-and-forget で送る。失敗してもドメイン遷移は成功扱い。
+  // sender 内部で try/catch しているので例外は来ない想定だが念のため握り潰す。
+  await notifyGameTransition(ctx, after, game.status, to).catch(() => []);
   return after;
 }

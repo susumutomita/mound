@@ -6,6 +6,7 @@ import {
   importGroundAvailability,
   listGroundSlots,
 } from "../../../usecases/ground";
+import { notifyGroundCancellation } from "../../../usecases/notification";
 import { type ParsedArgs, UsageError, boolFlag, optionalFlag } from "../args";
 import { type RenderOptions, emit, formatRows } from "../output";
 import { parseOrUsage } from "../zod-helper";
@@ -135,7 +136,24 @@ async function diffCommand(
     source: optionalFlag(args.flags, "source"),
     dateIso: optionalFlag(args.flags, "game-date"),
   });
-  const result = { since, count: slots.length, slots };
+
+  // --notify --team T が同時にあれば、検出結果をそのチームの enabled channel に push。
+  let notifications: unknown[] = [];
+  const shouldNotify = boolFlag(args.flags, "notify");
+  if (shouldNotify) {
+    const teamId = optionalFlag(args.flags, "team");
+    if (!teamId) {
+      throw new UsageError("--notify を指定したら --team も必要です");
+    }
+    notifications = await notifyGroundCancellation(ctx, teamId, slots);
+  }
+
+  const result = {
+    since,
+    count: slots.length,
+    slots,
+    ...(shouldNotify ? { notifications } : {}),
+  };
   const text =
     slots.length === 0
       ? `since ${since} 以降の新規空きはありません`
@@ -149,6 +167,9 @@ async function diffCommand(
             "status",
             "first_seen_at",
           ]),
-        ].join("\n");
+          shouldNotify ? `通知送信: ${notifications.length} 件` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
   emit(result, text, opts);
 }

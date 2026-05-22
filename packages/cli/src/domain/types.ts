@@ -19,6 +19,9 @@ export type RsvpResponse = (typeof RSVP_RESPONSES)[number];
 export const MEMBER_ROLES = ["ADMIN", "MEMBER"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+export const NOTIFICATION_KINDS = ["DISCORD", "SLACK", "LINE"] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
 export interface Team {
   id: string;
   name: string;
@@ -91,6 +94,25 @@ export interface RsvpBreakdown {
   unavailable: MemberRsvp[];
   maybe: MemberRsvp[];
   no_response: MemberRsvp[];
+}
+
+// チームに紐づく通知チャネル設定。
+// kind === "DISCORD" | "SLACK" は webhook_url 単独で動く。
+// kind === "LINE"  は LINE Messaging API push を想定:
+//   webhook_url: 'https://api.line.me/v2/bot/message/push' 固定の想定
+//   secret:      チャネルアクセストークン (Authorization: Bearer)
+//   target:      送信先 userId / groupId
+export interface NotificationChannel {
+  id: string;
+  team_id: string;
+  kind: NotificationKind;
+  webhook_url: string;
+  secret: string | null;
+  target: string | null;
+  label: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 // 外部スクレイパ (ground-reservation 等) から ingest した 1 件の空き枠。

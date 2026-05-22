@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS teams (
@@ -81,4 +81,20 @@ CREATE TABLE IF NOT EXISTS ground_slots (
 );
 CREATE INDEX IF NOT EXISTS idx_ground_slots_source ON ground_slots(source);
 CREATE INDEX IF NOT EXISTS idx_ground_slots_date ON ground_slots(date_iso);
+
+-- 通知チャネル設定。Discord/Slack は webhook_url のみ、LINE Messaging API は
+-- webhook_url + secret (channel access token) + target (user/group id) を使う。
+CREATE TABLE IF NOT EXISTS notification_channels (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('DISCORD', 'SLACK', 'LINE')),
+  webhook_url TEXT NOT NULL,
+  secret TEXT,
+  target TEXT,
+  label TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notif_channels_team ON notification_channels(team_id);
 `;

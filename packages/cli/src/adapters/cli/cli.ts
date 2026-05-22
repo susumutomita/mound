@@ -21,6 +21,7 @@ function isUserError(e: unknown): boolean {
   if (e instanceof Error && USER_ERROR_NAMES.has(e.name)) return true;
   return false;
 }
+import type { NotificationSender } from "../../ports";
 import { TransitionDeniedError } from "../../usecases/errors";
 import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
@@ -28,6 +29,7 @@ import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
 import { runMember } from "./commands/member";
+import { runNotify } from "./commands/notify";
 import { runRsvp } from "./commands/rsvp";
 import { runTeam } from "./commands/team";
 import { composeContext } from "./compose";
@@ -48,6 +50,7 @@ export interface RunOptions {
   db?: DbClient;
   now?: () => Date;
   newId?: () => string;
+  notifier?: NotificationSender;
 }
 
 export async function run(options: RunOptions): Promise<number> {
@@ -82,8 +85,10 @@ export async function run(options: RunOptions): Promise<number> {
     }
     const ctx = composeContext({
       db,
+      env: options.env,
       now: options.now ?? (() => new Date()),
       newId: options.newId ?? (() => crypto.randomUUID()),
+      notifier: options.notifier,
     });
 
     switch (command) {
@@ -110,6 +115,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "ground":
         await runGround(subArgs, ctx, renderOpts);
+        return 0;
+      case "notify":
+        await runNotify(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });

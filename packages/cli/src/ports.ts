@@ -7,6 +7,7 @@ import type {
   GroundSlot,
   Member,
   MemberRsvp,
+  NotificationChannel,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
@@ -67,6 +68,31 @@ export interface GroundSlotRepository {
   getByKey(slotKey: string): Promise<GroundSlot | null>;
 }
 
+export interface NotificationChannelRepository {
+  insert(channel: NotificationChannel): Promise<NotificationChannel>;
+  list(teamId: string): Promise<NotificationChannel[]>;
+  listEnabled(teamId: string): Promise<NotificationChannel[]>;
+  get(id: string): Promise<NotificationChannel | null>;
+  remove(id: string): Promise<boolean>;
+}
+
+// 1 件分の送信結果。送信失敗でも例外は投げず、ok=false で返す。
+// (送信エラーで上位のドメイン操作 — 試合の状態遷移など — を巻き戻したくない)
+export interface NotificationDeliveryResult {
+  channel_id: string;
+  channel_kind: string;
+  ok: boolean;
+  status_code: number | null;
+  error: string | null;
+}
+
+export interface NotificationSender {
+  send(
+    channel: NotificationChannel,
+    message: string,
+  ): Promise<NotificationDeliveryResult>;
+}
+
 export interface Repositories {
   teams: TeamRepository;
   members: MemberRepository;
@@ -74,6 +100,7 @@ export interface Repositories {
   rsvps: RsvpRepository;
   audit: AuditRepository;
   groundSlots: GroundSlotRepository;
+  notifications: NotificationChannelRepository;
 }
 
 export interface Clock {
@@ -86,4 +113,5 @@ export interface IdGenerator {
 
 export interface UseCaseContext extends Clock, IdGenerator {
   repo: Repositories;
+  notifier: NotificationSender;
 }

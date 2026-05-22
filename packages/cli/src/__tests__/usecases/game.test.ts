@@ -7,6 +7,7 @@ import type {
   GroundSlot,
   Member,
   MemberRsvp,
+  NotificationChannel,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
@@ -17,6 +18,8 @@ import type {
   GameRepository,
   GroundSlotRepository,
   MemberRepository,
+  NotificationChannelRepository,
+  NotificationSender,
   Repositories,
   RsvpRepository,
   TeamRepository,
@@ -33,6 +36,8 @@ interface Fake {
   rsvpStore: Map<string, Rsvp>;
   auditStore: AuditLog[];
   groundStore: Map<string, GroundSlot>;
+  notificationStore: Map<string, NotificationChannel>;
+  notifierCalls: Array<{ channel: NotificationChannel; message: string }>;
   repo: Repositories;
 }
 
@@ -172,6 +177,24 @@ function buildFake(): Fake {
     getByKey: async (slotKey) => groundStore.get(slotKey) ?? null,
   };
 
+  const notificationStore = new Map<string, NotificationChannel>();
+  const notifications: NotificationChannelRepository = {
+    insert: async (c) => {
+      notificationStore.set(c.id, c);
+      return c;
+    },
+    list: async (teamId) =>
+      Array.from(notificationStore.values()).filter(
+        (c) => c.team_id === teamId,
+      ),
+    listEnabled: async (teamId) =>
+      Array.from(notificationStore.values()).filter(
+        (c) => c.team_id === teamId && c.enabled,
+      ),
+    get: async (id) => notificationStore.get(id) ?? null,
+    remove: async (id) => notificationStore.delete(id),
+  };
+
   return {
     teamStore,
     memberStore,
@@ -179,7 +202,33 @@ function buildFake(): Fake {
     rsvpStore,
     auditStore,
     groundStore,
-    repo: { teams, members, games, rsvps, audit, groundSlots },
+    notificationStore,
+    notifierCalls: [],
+    repo: {
+      teams,
+      members,
+      games,
+      rsvps,
+      audit,
+      groundSlots,
+      notifications,
+    },
+  };
+}
+
+// 送信を記録するだけの fake notifier。テストから .calls を見て検証する。
+function buildFakeNotifier(fake: Fake): NotificationSender {
+  return {
+    send: async (channel, message) => {
+      fake.notifierCalls.push({ channel, message });
+      return {
+        channel_id: channel.id,
+        channel_kind: channel.kind,
+        ok: true,
+        status_code: null,
+        error: null,
+      };
+    },
   };
 }
 
@@ -188,6 +237,7 @@ function createCtx(): { ctx: UseCaseContext; fake: Fake } {
   let counter = 0;
   const ctx: UseCaseContext = {
     repo: fake.repo,
+    notifier: buildFakeNotifier(fake),
     now: () => new Date("2026-05-20T09:00:00.000Z"),
     newId: () => `id-${++counter}`,
   };
@@ -238,6 +288,48 @@ describe("createGame use case", () => {
 });
 
 describe("transitionGame use case", () => {
+  describe("通知チャネルがあるとき", () => {
+    it("遷移成功後に登録チャネルへ通知を送る", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "練習試合",
+        status: "DRAFT",
+        game_date: "2026-06-01",
+        ground_name: "公園",
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.notifications.insert({
+        id: "ch1",
+        team_id: "t",
+        kind: "DISCORD",
+        webhook_url: "https://discord.com/api/webhooks/x",
+        secret: null,
+        target: null,
+        label: null,
+        enabled: true,
+        created_at: "x",
+        updated_at: "x",
+      });
+
+      const after = await transitionGame(ctx, "g", "COLLECTING");
+      expect(after.status).toBe("COLLECTING");
+      expect(fake.notifierCalls).toHaveLength(1);
+      expect(fake.notifierCalls[0]?.message).toContain("DRAFT → COLLECTING");
+    });
+  });
+
   describe("人数不足のとき", () => {
     it("CONFIRMED への遷移を拒否する", async () => {
       const { ctx, fake } = createCtx();
