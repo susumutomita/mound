@@ -86,11 +86,13 @@ jobs:
         run: |
           bash -n scripts/generate-formula.sh
           bash -n scripts/build-dist.sh
+          bash -n scripts/install-ground-monitoring.sh
           sh -n packages/cli/scripts/mound-launcher.sh
       - name: shellcheck
         run: |
           shellcheck scripts/generate-formula.sh
           shellcheck scripts/build-dist.sh
+          shellcheck scripts/install-ground-monitoring.sh
           shellcheck packages/cli/scripts/mound-launcher.sh
 
   menubar:
