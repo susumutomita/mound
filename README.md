@@ -136,6 +136,11 @@ packages/
 │   │       └── cli/      # argv → usecase → 出力
 │   └── scripts/
 │       └── mound-launcher.sh   # POSIX sh launcher (配布物に同梱)
+├── ground-scraper/       # 独立 CLI: 公共予約システムをスクレイプして JSON
+│   ├── src/
+│   │   ├── adapters/     # mock / yokohama (stub) / …
+│   │   └── cli.ts        # mound-ground-scraper
+│   └── README.md
 └── menubar/              # macOS 14+ メニューバー常駐アプリ (SwiftPM)
     ├── Sources/MoundMenuBar/
     └── Tests/
