@@ -20,6 +20,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
   ground list [--source S] [--date YYYY-MM-DD]
+  ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
 
 サブコマンドの詳細:
   mound <command> [subcommand] --help        例: mound game create --help
@@ -292,10 +293,12 @@ JSON 出力:
 サブコマンド:
   ground import [--file PATH | --stdin] [--json]
   ground list   [--source S] [--date YYYY-MM-DD] [--json]
+  ground diff   [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD] [--json]
 
 詳細:
   mound ground import --help
   mound ground list --help
+  mound ground diff --help
 `,
 
   "ground import": `mound ground import — 外部スクレイパの JSON を取り込む
@@ -320,6 +323,25 @@ JSON 出力:
 
 エラー:
   - UsageError: --file / --stdin 未指定、JSON 不正、schema 不一致 (exit 2)
+`,
+
+  "ground diff": `mound ground diff — 直近キャンセル候補 (新規観測 slot) を抽出
+
+使い方:
+  mound ground diff [--since YYYY-MM-DDTHH:MM:SSZ] [--minutes N] \\
+    [--source <SOURCE>] [--game-date YYYY-MM-DD] [--json]
+
+フラグ:
+  --since      (任意) ISO8601 で閾値時刻。これ以降に first_seen された slot
+  --minutes    (任意) now - N 分以降に first_seen された slot (--since 未指定時の既定 60)
+  --source     (任意) スクレイパ source ID で絞り込み
+  --game-date  (任意) 試合日 (YYYY-MM-DD) で絞り込み
+
+JSON 出力:
+  { "since": ISO8601, "count": number, "slots": GroundSlot[] }
+
+エラー:
+  - UsageError: --since と --minutes 同時指定、--since が不正 ISO (exit 2)
 `,
 
   "ground list": `mound ground list — 取り込み済みの空き枠を表示

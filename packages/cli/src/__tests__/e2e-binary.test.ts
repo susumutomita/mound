@@ -357,6 +357,111 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       const r = runMound(["ground", "import", "--json"], env);
       expect(r.code).toBe(2);
     });
+
+    it("ground diff が since 閾値で新規 slot だけを返す", () => {
+      // 1 回目: 1 件取り込み
+      const first = {
+        schema_version: 1,
+        scraped_at: "2026-05-22T18:00:00+09:00",
+        regions: [
+          {
+            region: "kanagawa",
+            records: [
+              {
+                region: "kanagawa",
+                facility_name: "diffテスト球場A",
+                date_raw: "2026/06/15",
+                date_iso: "2026-06-15",
+                time_range: "09:00-13:00",
+                status: "空き",
+                raw: "\n2026/06/15 09:00-13:00 空き diffテスト球場A",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      const path1 = join(dbDir, "diff-1.json");
+      writeFileSync(path1, JSON.stringify(first));
+      const r1 = runMound(["ground", "import", "--file", path1, "--json"], env);
+      expect(r1.code).toBe(0);
+      // 取り込み直後を記録 (since の比較用)
+      const importedAt = parseJson<{ scraped_at: string }>(r1.stdout);
+      expect(importedAt).toBeDefined();
+
+      // 2 回目: 同じ slot + 新規 1 件
+      const second = JSON.parse(JSON.stringify(first));
+      second.scraped_at = "2026-05-23T18:00:00+09:00";
+      second.regions[0].records.push({
+        region: "kanagawa",
+        facility_name: "diffテスト球場B (新顔)",
+        date_raw: "2026/06/22",
+        date_iso: "2026-06-22",
+        time_range: "13:00-17:00",
+        status: "空き",
+        raw: "\n2026/06/22 13:00-17:00 空き diffテスト球場B (新顔)",
+      });
+      const path2 = join(dbDir, "diff-2.json");
+      writeFileSync(path2, JSON.stringify(second));
+      const r2 = runMound(["ground", "import", "--file", path2, "--json"], env);
+      expect(r2.code).toBe(0);
+
+      // 1970 を since にすると全件 (2 件) 返る
+      const allR = runMound(
+        [
+          "ground",
+          "diff",
+          "--since",
+          "1970-01-01T00:00:00Z",
+          "--source",
+          "kanagawa",
+          "--json",
+        ],
+        env,
+      );
+      expect(allR.code).toBe(0);
+      const all = parseJson<{ count: number; slots: unknown[] }>(allR.stdout);
+      expect(all.count).toBe(2);
+
+      // 直近 1 分の since にすると新顔 1 件だけ
+      const recentR = runMound(
+        [
+          "ground",
+          "diff",
+          "--minutes",
+          "1",
+          "--source",
+          "kanagawa",
+          "--game-date",
+          "2026-06-22",
+          "--json",
+        ],
+        env,
+      );
+      expect(recentR.code).toBe(0);
+      const recent = parseJson<{
+        count: number;
+        slots: Array<{ facility_name: string }>;
+      }>(recentR.stdout);
+      expect(recent.count).toBe(1);
+      expect(recent.slots[0]?.facility_name).toBe("diffテスト球場B (新顔)");
+    });
+
+    it("ground diff の --since と --minutes は同時指定で exit 2", () => {
+      const r = runMound(
+        [
+          "ground",
+          "diff",
+          "--since",
+          "2026-01-01T00:00:00Z",
+          "--minutes",
+          "60",
+          "--json",
+        ],
+        env,
+      );
+      expect(r.code).toBe(2);
+    });
   });
 
   describe("エージェントが --help でフラグを把握するとき", () => {

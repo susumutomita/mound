@@ -14,6 +14,7 @@ import type {
 import type {
   AuditRepository,
   GameRepository,
+  GroundSlotDiffFilter,
   GroundSlotFilter,
   GroundSlotRepository,
   MemberRepository,
@@ -369,6 +370,25 @@ class LibsqlGroundSlotRepository implements GroundSlotRepository {
       args: [slotKey],
     });
     return r.rows[0] ? rowToGroundSlot(r.rows[0]) : null;
+  }
+
+  async listNewerThan(filter: GroundSlotDiffFilter): Promise<GroundSlot[]> {
+    const where: string[] = ["first_seen_at >= ?"];
+    const args: InValue[] = [filter.since];
+    if (filter.source) {
+      where.push("source = ?");
+      args.push(filter.source);
+    }
+    if (filter.dateIso) {
+      where.push("date_iso = ?");
+      args.push(filter.dateIso);
+    }
+    const r = await this.db.execute({
+      sql: `SELECT * FROM ground_slots WHERE ${where.join(" AND ")}
+            ORDER BY first_seen_at DESC, date_iso ASC, time_range ASC`,
+      args,
+    });
+    return r.rows.map(rowToGroundSlot);
   }
 }
 

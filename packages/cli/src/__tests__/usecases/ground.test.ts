@@ -8,6 +8,7 @@ import type {
 } from "../../ports";
 import {
   ScrapeOutputSchema,
+  detectNewSlots,
   importGroundAvailability,
   listGroundSlots,
 } from "../../usecases/ground";
@@ -25,6 +26,13 @@ function fakeRepo(): {
     list: async (filter: GroundSlotFilter) =>
       Array.from(store.values()).filter(
         (s) =>
+          (!filter.source || s.source === filter.source) &&
+          (!filter.dateIso || s.date_iso === filter.dateIso),
+      ),
+    listNewerThan: async (filter) =>
+      Array.from(store.values()).filter(
+        (s) =>
+          s.first_seen_at >= filter.since &&
           (!filter.source || s.source === filter.source) &&
           (!filter.dateIso || s.date_iso === filter.dateIso),
       ),
@@ -180,6 +188,81 @@ describe("importGroundAvailability use case", () => {
       await expect(
         importGroundAvailability(ctx, { not: "valid" }),
       ).rejects.toThrow();
+    });
+  });
+});
+
+describe("detectNewSlots use case", () => {
+  describe("初回取り込み直前を since にしたとき", () => {
+    it("全件返す (全部新規)", async () => {
+      const firstNow = new Date("2026-05-22T10:00:00Z");
+      const { ctx } = buildCtx({ now: firstNow });
+      await importGroundAvailability(ctx, SAMPLE_PAYLOAD);
+      const result = await detectNewSlots(ctx, {
+        since: "2026-05-22T09:59:00Z",
+      });
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe("2 回目の取り込みで slot が増えていないとき", () => {
+    it("1 回目以降を since にすると 0 件", async () => {
+      const firstNow = new Date("2026-05-22T10:00:00Z");
+      const secondNow = new Date("2026-05-23T10:00:00Z");
+      const ctx1 = buildCtx({ now: firstNow });
+      await importGroundAvailability(ctx1.ctx, SAMPLE_PAYLOAD);
+
+      const ctx2: UseCaseContext = { ...ctx1.ctx, now: () => secondNow };
+      await importGroundAvailability(ctx2, SAMPLE_PAYLOAD);
+
+      // 1 回目 + 1ms 以降に first_seen の slot は無いはず
+      const result = await detectNewSlots(ctx2, {
+        since: "2026-05-22T10:00:00.001Z",
+      });
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("2 回目に新規 slot が混じったとき", () => {
+    it("新規分だけが返る", async () => {
+      const firstNow = new Date("2026-05-22T10:00:00Z");
+      const secondNow = new Date("2026-05-23T10:00:00Z");
+      const ctx1 = buildCtx({ now: firstNow });
+      await importGroundAvailability(ctx1.ctx, SAMPLE_PAYLOAD);
+
+      const enriched = JSON.parse(JSON.stringify(SAMPLE_PAYLOAD));
+      enriched.scraped_at = "2026-05-23T18:00:00+09:00";
+      enriched.regions[0].records.push({
+        region: "yokohama",
+        facility_name: "新顔グラウンド",
+        date_raw: "令和8年6月1日(土)",
+        date_iso: "2026-06-01",
+        time_range: "09:00-12:00",
+        status: null,
+        raw: "\n令和8年6月1日(土) 09:00-12:00 新顔グラウンド",
+      });
+      const ctx2: UseCaseContext = { ...ctx1.ctx, now: () => secondNow };
+      await importGroundAvailability(ctx2, enriched);
+
+      const result = await detectNewSlots(ctx2, {
+        since: "2026-05-22T10:00:00.001Z",
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.facility_name).toBe("新顔グラウンド");
+    });
+  });
+
+  describe("source / dateIso のフィルタも効くべきとき", () => {
+    it("source 指定で他自治体は除外する", async () => {
+      const firstNow = new Date("2026-05-22T10:00:00Z");
+      const { ctx } = buildCtx({ now: firstNow });
+      await importGroundAvailability(ctx, SAMPLE_PAYLOAD);
+      const result = await detectNewSlots(ctx, {
+        since: "2026-05-22T09:00:00Z",
+        source: "kanagawa",
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.source).toBe("kanagawa");
     });
   });
 });

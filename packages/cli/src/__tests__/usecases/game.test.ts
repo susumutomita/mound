@@ -162,6 +162,13 @@ function buildFake(): Fake {
           (!filter.source || s.source === filter.source) &&
           (!filter.dateIso || s.date_iso === filter.dateIso),
       ),
+    listNewerThan: async (filter) =>
+      Array.from(groundStore.values()).filter(
+        (s) =>
+          s.first_seen_at >= filter.since &&
+          (!filter.source || s.source === filter.source) &&
+          (!filter.dateIso || s.date_iso === filter.dateIso),
+      ),
     getByKey: async (slotKey) => groundStore.get(slotKey) ?? null,
   };
 
