@@ -34,4 +34,5 @@ npm-debug.log*
 .vscode/
 .idea/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 .last-run.json

@@ -34,13 +34,20 @@ mound --version
 ```bash
 git clone https://github.com/susumutomita/mound.git
 cd mound
-make install        # 依存インストール
-make install-local  # dist/local/mound-<host>/ を $HOME/.local/share/mound にコピー +
-                    # $HOME/.local/bin/mound に launcher への symlink
+make install        # 依存インストール (Bun deps)
+make install-local  # mound + ground-monitoring を $HOME/.local/{bin,share} に配置
 mound --version
+ground-monitoring --version
 ```
 
-`make cli-build` 単体だと `dist/local/mound-<host>/` を生成するだけで PATH に乗らない。`INSTALL_PREFIX` で行き先変更可(例: `make install-local INSTALL_PREFIX=/opt/homebrew`)。`make uninstall-local` で削除。
+`make install-local` は以下を一括でやる:
+
+1. `dist/local/mound-<host>/` を生成し `$HOME/.local/share/mound` にコピー、`$HOME/.local/bin/mound` に launcher への symlink を張る
+2. `susumutomita/ground-reservation` の最新 release から `ground-monitoring-<host>` tarball を DL + sha256 検証し、`$HOME/.local/share/ground-monitoring` に展開、`$HOME/.local/bin/ground-monitoring` に symlink
+
+これで `mound ground sync --notify --team $TEAM` が依存込みで動く状態になる。`make cli-build` 単体だと `dist/local/mound-<host>/` を生成するだけで PATH に乗らない。
+
+`INSTALL_PREFIX` で行き先変更可(例: `make install-local INSTALL_PREFIX=/opt/homebrew`)。連携先 ground-reservation のタグは `GROUND_RES_VERSION=v2.2.0 make install-local` で上書き可能(既定: `v2.1.0`)。`make uninstall-local` で両方削除。ネットワーク不能等で ground-monitoring の取得に失敗しても mound 本体のインストールは続行される(警告のみ)。
 
 > **配布の仕組み:** Bun の `bun build --compile` は libsql の native binding (`@libsql/<platform>/index.node`) を埋め込めない(`@neon-rs/load` が動的 require を使うため)。配布物は `bin/mound` (POSIX sh launcher) + `libexec/mound/{bun, mound.js, node_modules}` の構造で、launcher が `$(dirname "$0")/../libexec/mound/bun` を `exec` して JS bundle を Bun runtime で動かす。
 

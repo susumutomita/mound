@@ -1,4 +1,5 @@
 .PHONY: start mound build cli-build dist-clean install-local uninstall-local \
+        install-ground-monitoring uninstall-ground-monitoring \
         lint lint-fix lint-check format typecheck test test-watch test-coverage \
         check before-commit clean install install-ci help
 
@@ -47,7 +48,13 @@ dist-clean: ## dist/ を全削除
 	rm -rf $(DIST)
 
 INSTALL_PREFIX ?= $(HOME)/.local
-install-local: cli-build ## $(INSTALL_PREFIX)/{bin,share} に配置 (デフォルト ~/.local)
+
+# 連携先 ground-monitoring (susumutomita/ground-reservation) のバージョンとリポジトリ。
+# `GROUND_RES_VERSION=v2.2.0 make install-local` のように上書き可能。
+GROUND_RES_VERSION ?= v2.1.0
+GROUND_RES_REPO ?= susumutomita/ground-reservation
+
+install-local: cli-build install-ground-monitoring ## $(INSTALL_PREFIX)/{bin,share} に mound + ground-monitoring を配置
 	@mkdir -p $(INSTALL_PREFIX)/share $(INSTALL_PREFIX)/bin
 	@rm -rf $(INSTALL_PREFIX)/share/mound
 	@cp -R $(DIST)/local/mound-$(HOST_PLATFORM) $(INSTALL_PREFIX)/share/mound
@@ -58,10 +65,19 @@ install-local: cli-build ## $(INSTALL_PREFIX)/{bin,share} に配置 (デフォ�
 	  *) echo "⚠  $(INSTALL_PREFIX)/bin は PATH に入っていません" ;; \
 	esac
 
-uninstall-local: ## $(INSTALL_PREFIX) から削除
+install-ground-monitoring: ## ground-monitoring を GitHub Releases から取って $(INSTALL_PREFIX) に配置
+	@bash scripts/install-ground-monitoring.sh \
+	  $(HOST_PLATFORM) $(INSTALL_PREFIX) $(GROUND_RES_VERSION) $(GROUND_RES_REPO)
+
+uninstall-local: uninstall-ground-monitoring ## $(INSTALL_PREFIX) から mound と ground-monitoring を削除
 	@rm -f $(INSTALL_PREFIX)/bin/mound
 	@rm -rf $(INSTALL_PREFIX)/share/mound
-	@echo "✅ uninstalled from $(INSTALL_PREFIX)"
+	@echo "✅ uninstalled mound from $(INSTALL_PREFIX)"
+
+uninstall-ground-monitoring: ## $(INSTALL_PREFIX) から ground-monitoring を削除
+	@rm -f $(INSTALL_PREFIX)/bin/ground-monitoring
+	@rm -rf $(INSTALL_PREFIX)/share/ground-monitoring
+	@echo "✅ uninstalled ground-monitoring from $(INSTALL_PREFIX)"
 
 ## 品質チェック
 lint: ## Biome lint チェック
