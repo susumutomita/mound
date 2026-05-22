@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS teams (
@@ -62,4 +62,23 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_logs(target_type, target_id);
+
+-- 外部スクレイパ (ground-reservation 等) から取り込んだグラウンドの空き枠。
+-- slot_key = source|facility_name|date_iso|time_range で upsert する。
+CREATE TABLE IF NOT EXISTS ground_slots (
+  id TEXT PRIMARY KEY,
+  slot_key TEXT NOT NULL UNIQUE,
+  source TEXT NOT NULL,
+  facility_name TEXT NOT NULL,
+  date_iso TEXT,
+  date_raw TEXT NOT NULL,
+  time_range TEXT,
+  status TEXT,
+  raw TEXT NOT NULL,
+  scraped_at TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  ingested_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ground_slots_source ON ground_slots(source);
+CREATE INDEX IF NOT EXISTS idx_ground_slots_date ON ground_slots(date_iso);
 `;
