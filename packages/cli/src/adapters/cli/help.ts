@@ -21,6 +21,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
   ground list [--source S] [--date YYYY-MM-DD]
   ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
+  ground sync [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T]
   notify add --team <ID> --kind DISCORD|SLACK|LINE --webhook <URL> [--secret S] [--target T] [--label L]
   notify list --team <ID>
   notify remove <ID>
@@ -301,11 +302,13 @@ JSON 出力:
   ground import [--file PATH | --stdin] [--json]
   ground list   [--source S] [--date YYYY-MM-DD] [--json]
   ground diff   [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD] [--json]
+  ground sync   [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T] [--json]
 
 詳細:
   mound ground import --help
   mound ground list --help
   mound ground diff --help
+  mound ground sync --help
 `,
 
   "ground import": `mound ground import — 外部スクレイパの JSON を取り込む
@@ -330,6 +333,42 @@ JSON 出力:
 
 エラー:
   - UsageError: --file / --stdin 未指定、JSON 不正、schema 不一致 (exit 2)
+`,
+
+  "ground sync": `mound ground sync — ground-monitoring を呼んで import + (任意で) 通知まで 1 コマンド
+
+使い方:
+  mound ground sync [--region all|<R>] [--bin PATH] [--timeout-ms N] \\
+    [--notify --team <ID>] [--json]
+
+フラグ:
+  --region       (任意) all | yokohama | hiratsuka | kanagawa | kamakura |
+                       fujisawa | samukawa | ayase (既定: all)
+  --bin          (任意) ground-monitoring の絶対パス (既定: PATH から解決)
+  --timeout-ms   (任意) scraper のタイムアウト ms (既定: 60000)
+  --notify       (任意) 検出された新規 slot を通知する (要 --team)
+  --team         (--notify 必須) 通知先チーム ID
+
+挙動:
+  1. now() を beforeSyncAt として記録
+  2. <bin> --region <R> --json を spawn
+  3. exit code / stderr / timeout を見て失敗なら exit 1
+  4. stdout JSON を import (mound ground import と同じロジック)
+  5. detectNewSlots({ since: beforeSyncAt }) で「今回 sync で初観測」slot を抽出
+  6. --notify --team が指定されていれば notifyGroundCancellation で送信
+
+JSON 出力:
+  {
+    "region": string,
+    "bin": string,
+    "scraped_at": ISO8601,
+    "total_records": number,
+    "inserted": number,
+    "updated": number,
+    "regions_with_errors": [{ "region": string, "errors": string[] }],
+    "new_slots": GroundSlot[],
+    "notifications"?: NotificationDeliveryResult[]
+  }
 `,
 
   "ground diff": `mound ground diff — 直近キャンセル候補 (新規観測 slot) を抽出
