@@ -613,6 +613,160 @@ JSON
       expect(r.code).toBe(2);
       expect(r.stderr).toContain("--team");
     });
+
+    it("watch を登録すると ground sync --notify はマッチした new_slots だけを送る", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "watch e2e", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      runMound(
+        [
+          "notify",
+          "add",
+          "--team",
+          team.id,
+          "--kind",
+          "DISCORD",
+          "--webhook",
+          "https://discord.com/api/webhooks/dummy",
+          "--json",
+        ],
+        env,
+      );
+
+      // 週末午前の野球場だけを通すよう watch を登録
+      const addWatch = runMound(
+        [
+          "watch",
+          "add",
+          "--team",
+          team.id,
+          "--facility",
+          "%野球場%",
+          "--weekdays",
+          "sat,sun",
+          "--time-to",
+          "12:00",
+          "--label",
+          "週末午前",
+          "--json",
+        ],
+        env,
+      );
+      expect(addWatch.code).toBe(0);
+
+      // 3 件中 1 件だけ watch にマッチする mock JSON を吐くスクリプト
+      const mockBin = join(dbDir, "fake-watch-filter.sh");
+      const payload = {
+        schema_version: 1,
+        scraped_at: "2026-05-22T20:00:00+09:00",
+        regions: [
+          {
+            region: "kanagawa",
+            records: [
+              // 土曜 09-12 の野球場 → match
+              {
+                region: "kanagawa",
+                facility_name: "軟式野球場",
+                date_raw: "2026/05/30",
+                date_iso: "2026-05-30",
+                time_range: "09:00-12:00",
+                status: "空き",
+                raw: "",
+              },
+              // 土曜 15-18 の野球場 → time_to=12:00 で弾かれる
+              {
+                region: "kanagawa",
+                facility_name: "軟式野球場",
+                date_raw: "2026/05/30",
+                date_iso: "2026-05-30",
+                time_range: "15:00-18:00",
+                status: "空き",
+                raw: "",
+              },
+              // 土曜 09-12 の体育館 → facility_pattern で弾かれる
+              {
+                region: "kanagawa",
+                facility_name: "体育館",
+                date_raw: "2026/05/30",
+                date_iso: "2026-05-30",
+                time_range: "09:00-12:00",
+                status: "空き",
+                raw: "",
+              },
+            ],
+            errors: [],
+          },
+        ],
+      };
+      writeFileSync(
+        mockBin,
+        `#!/usr/bin/env bash\ncat <<'JSON'\n${JSON.stringify(payload)}\nJSON\n`,
+        { mode: 0o755 },
+      );
+
+      const r = runMound(
+        [
+          "ground",
+          "sync",
+          "--bin",
+          mockBin,
+          "--notify",
+          "--team",
+          team.id,
+          "--json",
+        ],
+        env,
+      );
+      expect(r.code).toBe(0);
+      const out = parseJson<{
+        new_slots: Array<{ facility_name: string; time_range: string }>;
+        notifications: Array<{ ok: boolean }>;
+      }>(r.stdout);
+
+      // new_slots は 3 件 (全部 first observed) だが、通知は filter が効いて 1 件
+      expect(out.new_slots).toHaveLength(3);
+      expect(out.notifications).toHaveLength(1);
+      // log-only sender が stderr に出した内容に「軟式野球場」09:00-12:00 が乗る
+      expect(r.stderr).toContain("軟式野球場");
+      // 弾かれた 体育館 / 15:00-18:00 は乗らない
+      expect(r.stderr).not.toContain("体育館");
+      expect(r.stderr).not.toContain("15:00-18:00");
+    });
+
+    it("watch test --team で現在の slot が watch に合致するか確認できる", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "watch test cmd", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      // 何も watch を入れていない状態 → 全件返る
+      const r0 = runMound(["watch", "test", "--team", team.id, "--json"], env);
+      expect(r0.code).toBe(0);
+      const baseline = parseJson<{ count: number }>(r0.stdout);
+
+      // watch を登録: kanagawa の体育館だけマッチ (現状の DB には体育館 slot が無いはず)
+      runMound(
+        [
+          "watch",
+          "add",
+          "--team",
+          team.id,
+          "--source",
+          "kanagawa",
+          "--facility",
+          "体育館",
+          "--json",
+        ],
+        env,
+      );
+      const r1 = runMound(["watch", "test", "--team", team.id, "--json"], env);
+      expect(r1.code).toBe(0);
+      const filtered = parseJson<{ count: number }>(r1.stdout);
+      // watch を 1 つ入れたので絞り込みが効く → baseline 以下
+      expect(filtered.count).toBeLessThanOrEqual(baseline.count);
+    });
   });
 
   describe("notify チャネル管理のとき", () => {

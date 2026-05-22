@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS teams (
@@ -97,4 +97,21 @@ CREATE TABLE IF NOT EXISTS notification_channels (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notif_channels_team ON notification_channels(team_id);
+
+-- チームごとの「気になるグラウンド条件」。各フィールド null は任意 (フィルタしない)。
+-- 同じ team の watch は OR で評価する。
+CREATE TABLE IF NOT EXISTS ground_watches (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  label TEXT,
+  source TEXT,
+  facility_pattern TEXT,
+  weekdays TEXT,
+  time_from TEXT,
+  time_to TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ground_watches_team ON ground_watches(team_id);
 `;

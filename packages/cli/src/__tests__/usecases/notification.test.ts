@@ -67,6 +67,16 @@ function buildFake(opts?: { senderError?: Error }): Fake {
   // GroundSlotRepository だけは型を埋めるためのスタブ。本テストでは使わない。
   const groundSlots: GroundSlotRepository = stub;
 
+  // groundWatches は filterSlotsByTeamWatches が listEnabled の戻り値の .length を
+  // 触るため、Proxy の "全部 null を返す" stub では落ちる。明示的に空配列を返す。
+  const emptyWatches = {
+    insert: async (w: never) => w,
+    list: async () => [],
+    listEnabled: async () => [],
+    get: async () => null,
+    remove: async () => false,
+  } as never;
+
   const repo: Repositories = {
     teams: teamRepo,
     members: stub,
@@ -75,6 +85,7 @@ function buildFake(opts?: { senderError?: Error }): Fake {
     audit: stub,
     groundSlots,
     notifications: notificationRepo,
+    groundWatches: emptyWatches,
   };
 
   const notifier: NotificationSender = {

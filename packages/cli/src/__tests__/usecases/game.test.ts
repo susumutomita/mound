@@ -5,6 +5,7 @@ import type {
   AuditLog,
   Game,
   GroundSlot,
+  GroundWatch,
   Member,
   MemberRsvp,
   NotificationChannel,
@@ -17,6 +18,7 @@ import type {
   AuditRepository,
   GameRepository,
   GroundSlotRepository,
+  GroundWatchRepository,
   MemberRepository,
   NotificationChannelRepository,
   NotificationSender,
@@ -195,6 +197,22 @@ function buildFake(): Fake {
     remove: async (id) => notificationStore.delete(id),
   };
 
+  const watchStore = new Map<string, GroundWatch>();
+  const groundWatches: GroundWatchRepository = {
+    insert: async (w) => {
+      watchStore.set(w.id, w);
+      return w;
+    },
+    list: async (teamId) =>
+      Array.from(watchStore.values()).filter((w) => w.team_id === teamId),
+    listEnabled: async (teamId) =>
+      Array.from(watchStore.values()).filter(
+        (w) => w.team_id === teamId && w.enabled,
+      ),
+    get: async (id) => watchStore.get(id) ?? null,
+    remove: async (id) => watchStore.delete(id),
+  };
+
   return {
     teamStore,
     memberStore,
@@ -212,6 +230,7 @@ function buildFake(): Fake {
       audit,
       groundSlots,
       notifications,
+      groundWatches,
     },
   };
 }

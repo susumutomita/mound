@@ -9,6 +9,7 @@ import type {
   AuditLog,
   Game,
   GroundSlot,
+  GroundWatch,
   Member,
   MemberRsvp,
   NotificationChannel,
@@ -101,6 +102,22 @@ export function rowToNotificationChannel(row: Row): NotificationChannel {
     secret: nullable(row.secret),
     target: nullable(row.target),
     label: nullable(row.label),
+    enabled: Number(row.enabled) !== 0,
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToGroundWatch(row: Row): GroundWatch {
+  return {
+    id: str(row.id),
+    team_id: str(row.team_id),
+    label: nullable(row.label),
+    source: nullable(row.source),
+    facility_pattern: nullable(row.facility_pattern),
+    weekdays: nullable(row.weekdays),
+    time_from: nullable(row.time_from),
+    time_to: nullable(row.time_to),
     enabled: Number(row.enabled) !== 0,
     created_at: str(row.created_at),
     updated_at: str(row.updated_at),
