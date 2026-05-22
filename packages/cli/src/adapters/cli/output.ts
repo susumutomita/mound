@@ -30,9 +30,12 @@ export function emit<T>(value: T, text: string, opts: RenderOptions): void {
 export function emitError(
   message: string,
   opts: { json: boolean; sink: OutputSink },
+  details?: Record<string, unknown>,
 ): void {
   if (opts.json) {
-    opts.sink.write(JSON.stringify({ ok: false, error: message }));
+    opts.sink.write(
+      JSON.stringify({ ok: false, error: message, ...(details ?? {}) }),
+    );
   } else {
     opts.sink.write(`エラー: ${message}`);
   }

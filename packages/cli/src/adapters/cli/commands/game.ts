@@ -102,6 +102,10 @@ async function show(
   const { game, rsvp_summary: s, rsvp_breakdown: b } = detail;
   const names = (rows: { member_name: string }[]) =>
     rows.length === 0 ? "(なし)" : rows.map((r) => r.member_name).join(", ");
+  const transitions =
+    detail.available_transitions.length === 0
+      ? "(終端)"
+      : detail.available_transitions.join(" | ");
   const text = [
     `${game.title} [${game.status}]`,
     `id: ${game.id}`,
@@ -115,6 +119,7 @@ async function show(
     `  欠席:     ${names(b.unavailable)}`,
     `  未定:     ${names(b.maybe)}`,
     `  未回答:   ${names(b.no_response)}`,
+    `次の遷移: ${transitions}`,
   ].join("\n");
   emit(detail, text, opts);
 }

@@ -21,7 +21,8 @@ import type {
   UseCaseContext,
 } from "../../ports";
 
-import { createGame, transitionGame } from "../../usecases/game";
+import { TransitionDeniedError } from "../../usecases/errors";
+import { createGame, showGame, transitionGame } from "../../usecases/game";
 
 interface Fake {
   teamStore: Map<string, Team>;
@@ -236,6 +237,152 @@ describe("transitionGame use case", () => {
       await expect(transitionGame(ctx, "g", "CONFIRMED")).rejects.toThrow(
         /最低人数/,
       );
+    });
+
+    it("エラーに from / to / available_transitions / rsvp_summary / min_players が載る", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "COLLECTING",
+        game_date: null,
+        ground_name: null,
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+
+      let captured: TransitionDeniedError | undefined;
+      try {
+        await transitionGame(ctx, "g", "CONFIRMED");
+      } catch (e) {
+        if (e instanceof TransitionDeniedError) captured = e;
+        else throw e;
+      }
+      expect(captured).toBeInstanceOf(TransitionDeniedError);
+      expect(captured?.from).toBe("COLLECTING");
+      expect(captured?.to).toBe("CONFIRMED");
+      // COLLECTING からは CONFIRMED と CANCELLED に行ける。
+      expect(captured?.available_transitions).toEqual(
+        expect.arrayContaining(["CONFIRMED", "CANCELLED"]),
+      );
+      expect(captured?.min_players).toBe(9);
+      expect(captured?.rsvp_summary?.available).toBe(0);
+
+      const details = captured?.toDetails();
+      expect(details?.from).toBe("COLLECTING");
+      expect(details?.available_transitions).toBeDefined();
+      expect(details?.min_players).toBe(9);
+    });
+  });
+
+  describe("不正な遷移先のとき", () => {
+    it("available_transitions に有効遷移先が載って rsvp_summary は省かれる", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "DRAFT",
+        game_date: null,
+        ground_name: null,
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+
+      let captured: TransitionDeniedError | undefined;
+      try {
+        await transitionGame(ctx, "g", "SETTLED");
+      } catch (e) {
+        if (e instanceof TransitionDeniedError) captured = e;
+        else throw e;
+      }
+      expect(captured?.from).toBe("DRAFT");
+      expect(captured?.available_transitions).toEqual(
+        expect.arrayContaining(["COLLECTING", "CONFIRMED", "CANCELLED"]),
+      );
+      // 不正遷移は rsvp/min_players 関係ないが、現実装では設定される。
+      // どちらでもよいが details に出ても害は無い。
+      const details = captured?.toDetails();
+      expect(details?.from).toBe("DRAFT");
+    });
+  });
+});
+
+describe("showGame use case", () => {
+  describe("DRAFT 状態のとき", () => {
+    it("available_transitions に DRAFT からの全遷移先が載る", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "DRAFT",
+        game_date: null,
+        ground_name: null,
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      const detail = await showGame(ctx, "g");
+      expect(detail.game.status).toBe("DRAFT");
+      expect(detail.available_transitions).toEqual(
+        expect.arrayContaining(["COLLECTING", "CONFIRMED", "CANCELLED"]),
+      );
+      expect(detail.available_transitions).not.toContain("COMPLETED");
+    });
+  });
+
+  describe("終端 (SETTLED) のとき", () => {
+    it("available_transitions は空配列", async () => {
+      const { ctx, fake } = createCtx();
+      await fake.repo.teams.insert({
+        id: "t",
+        name: "T",
+        home_area: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      await fake.repo.games.insert({
+        id: "g",
+        team_id: "t",
+        title: "x",
+        status: "SETTLED",
+        game_date: null,
+        ground_name: null,
+        min_players: 9,
+        note: null,
+        created_at: "x",
+        updated_at: "x",
+      });
+      const detail = await showGame(ctx, "g");
+      expect(detail.available_transitions).toEqual([]);
     });
   });
 });

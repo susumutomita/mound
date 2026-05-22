@@ -21,6 +21,7 @@ function isUserError(e: unknown): boolean {
   if (e instanceof Error && USER_ERROR_NAMES.has(e.name)) return true;
   return false;
 }
+import { TransitionDeniedError } from "../../usecases/errors";
 import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
 import { runGame } from "./commands/game";
@@ -29,7 +30,7 @@ import { runMember } from "./commands/member";
 import { runRsvp } from "./commands/rsvp";
 import { runTeam } from "./commands/team";
 import { composeContext } from "./compose";
-import { HELP, VERSION } from "./help";
+import { HELP, VERSION, findCommandHelp } from "./help";
 import {
   type OutputSink,
   emit,
@@ -59,7 +60,11 @@ export async function run(options: RunOptions): Promise<number> {
     emit({ version: VERSION }, `mound ${VERSION}`, renderOpts);
     return 0;
   }
-  if (boolFlag(parsed.flags, "help") || parsed.positional.length === 0) {
+  if (boolFlag(parsed.flags, "help")) {
+    stdout.write(findCommandHelp(parsed.positional) ?? HELP);
+    return 0;
+  }
+  if (parsed.positional.length === 0) {
     stdout.write(HELP);
     return 0;
   }
@@ -108,7 +113,9 @@ export async function run(options: RunOptions): Promise<number> {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    emitError(message, { json, sink: stderr });
+    const details =
+      e instanceof TransitionDeniedError ? e.toDetails() : undefined;
+    emitError(message, { json, sink: stderr }, details);
     return isUserError(e) ? 2 : 1;
   } finally {
     if (ownsDb && db) {

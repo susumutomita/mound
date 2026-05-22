@@ -1,4 +1,4 @@
-import { checkGuard } from "../domain/state-machine";
+import { checkGuard, getAvailableTransitions } from "../domain/state-machine";
 import type { Game, GameStatus, RsvpBreakdown } from "../domain/types";
 import type { UseCaseContext } from "../ports";
 import { writeAuditLog } from "./audit";
@@ -67,6 +67,7 @@ export interface GameDetail {
     no_response: number;
   };
   rsvp_breakdown: RsvpBreakdown;
+  available_transitions: GameStatus[];
 }
 
 export async function showGame(
@@ -85,6 +86,7 @@ export async function showGame(
       no_response: breakdown.no_response.length,
     },
     rsvp_breakdown: breakdown,
+    available_transitions: getAvailableTransitions(game.status),
   };
 }
 
@@ -103,7 +105,14 @@ export async function transitionGame(
     now: ctx.now(),
   });
   if (!guard.allowed) {
-    throw new TransitionDeniedError(guard.reason ?? "遷移が許可されていません");
+    throw new TransitionDeniedError({
+      from: game.status,
+      to,
+      available_transitions: getAvailableTransitions(game.status),
+      reason: guard.reason ?? "遷移が許可されていません",
+      rsvp_summary: rsvp,
+      min_players: game.min_players,
+    });
   }
   const nowIso = ctx.now().toISOString();
   const before = { ...game };
