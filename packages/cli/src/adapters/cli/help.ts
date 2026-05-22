@@ -26,6 +26,10 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   notify list --team <ID>
   notify remove <ID>
   notify test <ID> [--message TEXT]
+  watch add --team <ID> [--source S] [--facility PATTERN] [--weekdays sat,sun] [--time-from HH:MM] [--time-to HH:MM] [--label L]
+  watch list --team <ID>
+  watch remove <ID>
+  watch test --team <ID>
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -469,6 +473,84 @@ JSON 出力:
 
 JSON 出力:
   NotificationDeliveryResult { channel_id, channel_kind, ok, status_code, error }
+`,
+
+  watch: `mound watch — チームごとの「気になるグラウンド条件」
+
+サブコマンド:
+  watch add    --team <ID> [--source S] [--facility PATTERN] [--weekdays sat,sun] \\
+               [--time-from HH:MM] [--time-to HH:MM] [--label L] [--json]
+  watch list   --team <ID> [--json]
+  watch remove <ID> [--json]
+  watch test   --team <ID> [--json]   # 現在の ground_slots と watch を照合して可視化
+
+挙動:
+  - team に watch が 1 件も無ければ ground sync --notify は従来どおり全 new_slots を送る
+  - watch が 1 件以上あるとき: どれかにマッチ (OR) した new_slots だけ通知に乗る
+  - 各 watch 内: source / facility_pattern / weekdays / time_from / time_to は AND
+  - facility_pattern は SQL LIKE (% = 任意の文字列, _ = 任意の 1 文字)
+`,
+
+  "watch add": `mound watch add — チームに「気になるグラウンド条件」を 1 件登録
+
+使い方:
+  mound watch add --team <TEAM_ID> \\
+    [--source <SOURCE>] \\
+    [--facility <LIKE_PATTERN>] \\
+    [--weekdays sat,sun] \\
+    [--time-from HH:MM] [--time-to HH:MM] \\
+    [--label <NAME>] [--json]
+
+フラグ:
+  --team       (必須) チーム ID
+  --source     (任意) yokohama / hiratsuka / kanagawa / kamakura / fujisawa / samukawa / ayase
+  --facility   (任意) facility_name の SQL LIKE パターン (例: '%野球場%' / '田端%')
+  --weekdays   (任意) sun,mon,tue,wed,thu,fri,sat の CSV
+  --time-from  (任意) slot の開始がこれ以降 (HH:MM)
+  --time-to    (任意) slot の終了がこれ以前 (HH:MM)
+  --label      (任意) 表示名
+
+例:
+  土日午前の野球場を全自治体から:
+    mound watch add --team T --facility '%野球場%' --weekdays sat,sun --time-to 12:00 --label 'weekend AM'
+  kanagawa の軟式野球場 (夕方限定):
+    mound watch add --team T --source kanagawa --facility '軟式野球場' --time-from 16:00 --label '夕方'
+
+JSON 出力:
+  GroundWatch { id, team_id, label, source, facility_pattern, weekdays,
+                time_from, time_to, enabled, created_at, updated_at }
+`,
+
+  "watch list": `mound watch list — team の watch 一覧
+
+使い方:
+  mound watch list --team <TEAM_ID> [--json]
+
+JSON 出力:
+  GroundWatch[]
+`,
+
+  "watch remove": `mound watch remove — watch を 1 件削除
+
+使い方:
+  mound watch remove <ID> [--json]
+
+JSON 出力:
+  { "ok": boolean, "id": string }
+`,
+
+  "watch test": `mound watch test — 登録 watch と現在の ground_slots を照合
+
+使い方:
+  mound watch test --team <TEAM_ID> [--json]
+
+挙動:
+  team の enabled watch を使って、現在 mound に取り込まれている全 slot の
+  うちマッチするものを返す。エージェント / 人間が watch の挙動を確認する
+  デバッグ用。
+
+JSON 出力:
+  { "count": number, "slots": GroundSlot[] }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

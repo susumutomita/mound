@@ -32,6 +32,7 @@ import { runMember } from "./commands/member";
 import { runNotify } from "./commands/notify";
 import { runRsvp } from "./commands/rsvp";
 import { runTeam } from "./commands/team";
+import { runWatch } from "./commands/watch";
 import { composeContext } from "./compose";
 import { HELP, VERSION, findCommandHelp } from "./help";
 import {
@@ -118,6 +119,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "notify":
         await runNotify(subArgs, ctx, renderOpts);
+        return 0;
+      case "watch":
+        await runWatch(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });

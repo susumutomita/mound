@@ -4,6 +4,7 @@ import type {
   Game,
   GameStatus,
   GroundSlot,
+  GroundWatch,
   Member,
   MemberRsvp,
   NotificationChannel,
@@ -18,6 +19,7 @@ import type {
   GroundSlotDiffFilter,
   GroundSlotFilter,
   GroundSlotRepository,
+  GroundWatchRepository,
   MemberRepository,
   NotificationChannelRepository,
   Repositories,
@@ -29,6 +31,7 @@ import {
   rowToAuditLog,
   rowToGame,
   rowToGroundSlot,
+  rowToGroundWatch,
   rowToMember,
   rowToMemberRsvp,
   rowToNotificationChannel,
@@ -457,6 +460,66 @@ class LibsqlNotificationChannelRepository
   }
 }
 
+class LibsqlGroundWatchRepository implements GroundWatchRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(watch: GroundWatch): Promise<GroundWatch> {
+    await this.db.execute({
+      sql: `INSERT INTO ground_watches (
+              id, team_id, label, source, facility_pattern, weekdays,
+              time_from, time_to, enabled, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        watch.id,
+        watch.team_id,
+        watch.label,
+        watch.source,
+        watch.facility_pattern,
+        watch.weekdays,
+        watch.time_from,
+        watch.time_to,
+        watch.enabled ? 1 : 0,
+        watch.created_at,
+        watch.updated_at,
+      ],
+    });
+    return watch;
+  }
+
+  async list(teamId: string): Promise<GroundWatch[]> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM ground_watches WHERE team_id = ? ORDER BY created_at ASC",
+      args: [teamId],
+    });
+    return r.rows.map(rowToGroundWatch);
+  }
+
+  async listEnabled(teamId: string): Promise<GroundWatch[]> {
+    const r = await this.db.execute({
+      sql: `SELECT * FROM ground_watches WHERE team_id = ? AND enabled <> 0
+            ORDER BY created_at ASC`,
+      args: [teamId],
+    });
+    return r.rows.map(rowToGroundWatch);
+  }
+
+  async get(id: string): Promise<GroundWatch | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM ground_watches WHERE id = ?",
+      args: [id],
+    });
+    return r.rows[0] ? rowToGroundWatch(r.rows[0]) : null;
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM ground_watches WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -466,5 +529,6 @@ export function buildRepositories(db: DbClient): Repositories {
     audit: new LibsqlAuditRepository(db),
     groundSlots: new LibsqlGroundSlotRepository(db),
     notifications: new LibsqlNotificationChannelRepository(db),
+    groundWatches: new LibsqlGroundWatchRepository(db),
   };
 }

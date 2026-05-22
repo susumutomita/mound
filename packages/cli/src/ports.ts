@@ -5,6 +5,7 @@ import type {
   Game,
   GameStatus,
   GroundSlot,
+  GroundWatch,
   Member,
   MemberRsvp,
   NotificationChannel,
@@ -68,6 +69,14 @@ export interface GroundSlotRepository {
   getByKey(slotKey: string): Promise<GroundSlot | null>;
 }
 
+export interface GroundWatchRepository {
+  insert(watch: GroundWatch): Promise<GroundWatch>;
+  list(teamId: string): Promise<GroundWatch[]>;
+  listEnabled(teamId: string): Promise<GroundWatch[]>;
+  get(id: string): Promise<GroundWatch | null>;
+  remove(id: string): Promise<boolean>;
+}
+
 export interface NotificationChannelRepository {
   insert(channel: NotificationChannel): Promise<NotificationChannel>;
   list(teamId: string): Promise<NotificationChannel[]>;
@@ -101,6 +110,7 @@ export interface Repositories {
   audit: AuditRepository;
   groundSlots: GroundSlotRepository;
   notifications: NotificationChannelRepository;
+  groundWatches: GroundWatchRepository;
 }
 
 export interface Clock {

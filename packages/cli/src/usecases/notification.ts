@@ -7,6 +7,7 @@ import type {
 } from "../domain/types";
 import type { NotificationDeliveryResult, UseCaseContext } from "../ports";
 import { TeamNotFoundError } from "./errors";
+import { filterSlotsByTeamWatches } from "./ground-watch";
 
 export interface AddChannelInput {
   teamId: string;
@@ -128,6 +129,10 @@ export async function notifyGroundCancellation(
   slots: GroundSlot[],
 ): Promise<NotificationDeliveryResult[]> {
   if (slots.length === 0) return [];
-  const message = formatGroundCancellationMessage(slots);
+  // team に watch が登録されていれば、マッチするものだけに絞る (OR 評価)。
+  // watch が 0 件のチームは従来どおり全件通知 (後方互換)。
+  const matched = await filterSlotsByTeamWatches(ctx, teamId, slots);
+  if (matched.length === 0) return [];
+  const message = formatGroundCancellationMessage(matched);
   return dispatch(ctx, teamId, message);
 }

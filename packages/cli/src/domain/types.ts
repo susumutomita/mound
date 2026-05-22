@@ -115,6 +115,35 @@ export interface NotificationChannel {
   updated_at: string;
 }
 
+// 曜日コード (ISO weekday の小文字 3 文字)。watch.weekdays は CSV で持つ。
+export const WEEKDAY_CODES = [
+  "sun",
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+] as const;
+export type WeekdayCode = (typeof WEEKDAY_CODES)[number];
+
+// チームが「気になるグラウンド条件」を 1 件表す。
+// 各フィールドは null なら任意 (= フィルタしない) 扱い。複数フィールドは AND。
+// 同じ team に複数 watch があれば OR (どれか 1 つにマッチしたら通す)。
+export interface GroundWatch {
+  id: string;
+  team_id: string;
+  label: string | null;
+  source: string | null;
+  facility_pattern: string | null; // SQL LIKE パターン (例: '%野球場%')
+  weekdays: string | null; // CSV 'sat,sun' / null=任意
+  time_from: string | null; // 'HH:MM' / null=任意 (slot の開始がこれ以降)
+  time_to: string | null; // 'HH:MM' / null=任意 (slot の終了がこれ以前)
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // 外部スクレイパ (ground-reservation 等) から ingest した 1 件の空き枠。
 // slot_key = source|facility_name|date_iso|time_range (UNIQUE)
 //   ingest 時にこのキーで upsert する。
