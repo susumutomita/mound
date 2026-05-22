@@ -273,6 +273,55 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       );
       expect(r.code).toBe(2);
       expect(r.stderr).toContain("状態遷移が不正です");
+      // エージェント向け: エラー JSON に構造化フィールドが乗る
+      const errJson = JSON.parse(r.stderr.trim()) as {
+        ok: boolean;
+        error: string;
+        from: string;
+        to: string;
+        available_transitions: string[];
+      };
+      expect(errJson.ok).toBe(false);
+      expect(errJson.from).toBe("DRAFT");
+      expect(errJson.to).toBe("SETTLED");
+      expect(errJson.available_transitions).toEqual(
+        expect.arrayContaining(["COLLECTING", "CONFIRMED", "CANCELLED"]),
+      );
+    });
+  });
+
+  describe("エージェントが --help でフラグを把握するとき", () => {
+    it("mound game create --help がサブコマンド専用 help を返す", () => {
+      const r = runMound(["game", "create", "--help"], env);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain("mound game create");
+      expect(r.stdout).toContain("--team");
+      expect(r.stdout).toContain("--title");
+      // グローバル help の環境変数セクションは含まれない
+      expect(r.stdout).not.toContain("MOUND_DB_AUTH_TOKEN");
+    });
+
+    it("game show --json の出力に available_transitions が載る", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "HelpテストTeam", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      const gR = runMound(
+        ["game", "create", "--team", team.id, "--title", "show試合", "--json"],
+        env,
+      );
+      const game = parseJson<{ id: string }>(gR.stdout);
+      const r = runMound(["game", "show", game.id, "--json"], env);
+      expect(r.code).toBe(0);
+      const detail = parseJson<{
+        game: { status: string };
+        available_transitions: string[];
+      }>(r.stdout);
+      expect(detail.game.status).toBe("DRAFT");
+      expect(detail.available_transitions).toEqual(
+        expect.arrayContaining(["COLLECTING", "CONFIRMED", "CANCELLED"]),
+      );
     });
   });
 

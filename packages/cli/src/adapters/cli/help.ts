@@ -19,6 +19,9 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
 
+サブコマンドの詳細:
+  mound <command> [subcommand] --help        例: mound game create --help
+
 グローバルフラグ:
   --json       JSON 出力 (エージェント連携向け)
   --help       このヘルプ
@@ -30,3 +33,293 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
 `;
 
 export const VERSION = "0.1.0";
+
+// サブコマンド単位のヘルプ。エージェントが mound <cmd> [sub] --help だけで
+// 正確なフラグ仕様と出力スキーマを取れるよう、JSON 出力の shape も併記する。
+export const COMMAND_HELP: Record<string, string> = {
+  init: `mound init — DB を初期化する
+
+使い方:
+  mound init [--json]
+
+説明:
+  $MOUND_DB_URL (未設定なら ~/.mound/mound.db) にスキーマを適用する。
+  既存 DB に対しても安全 (PRAGMA user_version で lazy migration)。
+
+JSON 出力:
+  { "ok": true }
+`,
+
+  team: `mound team — チーム管理
+
+サブコマンド:
+  team create --name <N> [--area <A>] [--json]
+  team list [--json]
+
+詳細:
+  mound team create --help
+  mound team list --help
+`,
+
+  "team create": `mound team create — チームを作成する
+
+使い方:
+  mound team create --name <NAME> [--area <AREA>] [--json]
+
+フラグ:
+  --name   (必須) チーム名 (1..80 文字)
+  --area   (任意) 本拠地エリア (..80 文字)
+
+JSON 出力:
+  Team { id, name, home_area, created_at, updated_at }
+
+エラー:
+  - UsageError: フラグ不足 / バリデーション失敗 (exit 2)
+`,
+
+  "team list": `mound team list — チーム一覧
+
+使い方:
+  mound team list [--json]
+
+JSON 出力:
+  Team[] (created_at 昇順)
+`,
+
+  member: `mound member — メンバー管理
+
+サブコマンド:
+  member add  --team <TEAM_ID> --name <N> [--email <E>] [--role ADMIN|MEMBER] [--json]
+  member list --team <TEAM_ID> [--json]
+
+詳細:
+  mound member add --help
+  mound member list --help
+`,
+
+  "member add": `mound member add — メンバーを追加する
+
+使い方:
+  mound member add --team <TEAM_ID> --name <NAME> [--email <EMAIL>] [--role ADMIN|MEMBER] [--json]
+
+フラグ:
+  --team    (必須) チーム ID
+  --name    (必須) メンバー名
+  --email   (任意) メールアドレス
+  --role    (任意) ADMIN | MEMBER (既定: MEMBER)
+
+JSON 出力:
+  Member { id, team_id, name, email, role, created_at, updated_at }
+
+エラー:
+  - TeamNotFoundError: team が存在しない (exit 2)
+`,
+
+  "member list": `mound member list — メンバー一覧
+
+使い方:
+  mound member list --team <TEAM_ID> [--json]
+
+フラグ:
+  --team    (必須) チーム ID
+
+JSON 出力:
+  Member[]
+`,
+
+  game: `mound game — 試合管理
+
+サブコマンド:
+  game create     --team <TEAM_ID> --title <T> [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>] [--json]
+  game list       [--team <TEAM_ID>] [--status <STATUS>] [--json]
+  game show       <GAME_ID> [--json]
+  game transition <GAME_ID> --to <STATUS> [--json]
+
+状態遷移 (有効パス):
+  DRAFT      → COLLECTING / CONFIRMED / CANCELLED
+  COLLECTING → CONFIRMED (要 AVAILABLE >= min_players) / CANCELLED
+  CONFIRMED  → COMPLETED (要 game_date が経過) / CANCELLED
+  COMPLETED  → SETTLED
+  SETTLED / CANCELLED は終端
+
+詳細:
+  mound game create --help
+  mound game show --help
+  mound game transition --help
+`,
+
+  "game create": `mound game create — 試合を DRAFT で作成
+
+使い方:
+  mound game create --team <TEAM_ID> --title <TITLE> \\
+    [--date YYYY-MM-DD] [--ground <NAME>] [--min-players <N>] [--note <TEXT>] [--json]
+
+フラグ:
+  --team          (必須) チーム ID
+  --title         (必須) タイトル (1..120 文字)
+  --date          (任意) 試合日 (YYYY-MM-DD)
+  --ground        (任意) グラウンド名 (..80 文字)
+  --min-players   (任意) 成立最低人数 (1..30, 既定: 9)
+  --note          (任意) メモ (..500 文字)
+
+JSON 出力:
+  Game { id, team_id, title, status: "DRAFT", game_date, ground_name, min_players, note, ... }
+`,
+
+  "game list": `mound game list — 試合一覧
+
+使い方:
+  mound game list [--team <TEAM_ID>] [--status <STATUS>] [--json]
+
+フラグ:
+  --team    (任意) チーム ID で絞り込み
+  --status  (任意) DRAFT | COLLECTING | CONFIRMED | COMPLETED | SETTLED | CANCELLED
+
+JSON 出力:
+  Game[]
+`,
+
+  "game show": `mound game show — 試合詳細を表示
+
+使い方:
+  mound game show <GAME_ID> [--json]
+
+JSON 出力:
+  {
+    "game": Game,
+    "rsvp_summary": { available, unavailable, maybe, no_response },
+    "rsvp_breakdown": { available: MemberRsvp[], unavailable: MemberRsvp[], maybe: MemberRsvp[], no_response: MemberRsvp[] },
+    "available_transitions": GameStatus[]   // 現状態から遷移可能な状態リスト
+  }
+
+エラー:
+  - GameNotFoundError: 該当試合なし (exit 2)
+`,
+
+  "game transition": `mound game transition — 試合の状態を遷移させる
+
+使い方:
+  mound game transition <GAME_ID> --to <STATUS> [--json]
+
+フラグ:
+  --to   (必須) 遷移先 (DRAFT | COLLECTING | CONFIRMED | COMPLETED | SETTLED | CANCELLED)
+
+ガード条件:
+  - COLLECTING → CONFIRMED:  AVAILABLE >= min_players
+  - CONFIRMED  → COMPLETED:  game_date が現在日以前
+
+JSON 出力 (成功時):
+  Game (更新後)
+
+JSON 出力 (失敗時):
+  {
+    "ok": false,
+    "error": "<日本語メッセージ>",
+    "from": GameStatus,
+    "to": GameStatus,
+    "available_transitions": GameStatus[],
+    "rsvp_summary"?: {...},      // 人数不足のとき
+    "min_players"?: number        // 人数不足のとき
+  }
+`,
+
+  rsvp: `mound rsvp — 出欠管理
+
+サブコマンド:
+  rsvp set     --game <GAME_ID> --member <MEMBER_ID> --response <RESPONSE> [--json]
+  rsvp list    --game <GAME_ID> [--json]
+  rsvp summary --game <GAME_ID> [--team <TEAM_ID>] [--json]
+
+詳細:
+  mound rsvp set --help
+  mound rsvp list --help
+  mound rsvp summary --help
+`,
+
+  "rsvp set": `mound rsvp set — 出欠を記録する (upsert)
+
+使い方:
+  mound rsvp set --game <GAME_ID> --member <MEMBER_ID> --response <RESPONSE> [--json]
+
+フラグ:
+  --game      (必須) 試合 ID
+  --member    (必須) メンバー ID
+  --response  (必須) AVAILABLE | UNAVAILABLE | MAYBE | NO_RESPONSE
+
+JSON 出力:
+  Rsvp { id, game_id, member_id, response, responded_at, ... }
+
+エラー:
+  - CrossTeamRsvpError: member の所属チームが game と一致しない (exit 2)
+  - GameNotFoundError / MemberNotFoundError
+`,
+
+  "rsvp list": `mound rsvp list — 出欠を全メンバー分一覧
+
+使い方:
+  mound rsvp list --game <GAME_ID> [--json]
+
+JSON 出力:
+  MemberRsvp[] (member_id, member_name, member_role, response, responded_at)
+`,
+
+  "rsvp summary": `mound rsvp summary — 集計だけ取り出す
+
+使い方:
+  mound rsvp summary --game <GAME_ID> [--team <TEAM_ID>] [--json]
+
+JSON 出力:
+  { available, unavailable, maybe, no_response }
+`,
+
+  audit: `mound audit — 監査ログを表示
+
+使い方:
+  mound audit --target <ID> [--type game|team|member] [--json]
+
+フラグ:
+  --target  (必須) 対象 ID
+  --type    (任意) game | team | member (既定: game)
+
+JSON 出力:
+  AuditLog[] { id, actor, action, target_type, target_id, before_json, after_json, created_at }
+`,
+
+  agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)
+
+使い方:
+  mound agenda [--team <TEAM_ID>] [--horizon-days <N>] [--json]
+
+フラグ:
+  --team           (任意) チーム ID で絞り込み
+  --horizon-days   (任意) 何日先までを「開催間近」とみなすか (0..365, 既定: 7)
+
+JSON 出力:
+  {
+    "generated_at": ISO8601,
+    "team_id": string | null,
+    "horizon_days": number,
+    "needs_publish":     Game[],                                   // DRAFT のまま
+    "collecting":        { game, rsvp, ready_to_confirm, shortage }[],
+    "upcoming":          { game, days_until }[],                   // CONFIRMED かつ ≤ horizon
+    "needs_completion":  Game[],                                   // CONFIRMED かつ game_date 経過
+    "needs_settlement":  Game[]                                    // COMPLETED
+  }
+`,
+};
+
+// positional から最も具体的な help を選ぶ。
+// ["game", "create", ...] -> "game create" -> "game" -> null
+export function findCommandHelp(positional: string[]): string | null {
+  if (positional.length >= 2) {
+    const k = `${positional[0]} ${positional[1]}`;
+    const h = COMMAND_HELP[k];
+    if (h) return h;
+  }
+  if (positional.length >= 1) {
+    const k = positional[0] as string;
+    const h = COMMAND_HELP[k];
+    if (h) return h;
+  }
+  return null;
+}
