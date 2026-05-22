@@ -4,6 +4,8 @@
 
 > AI は提案する。システムは状態を持つ。人が最後に決める。
 
+**Hermes 等の AI エージェント連携:** [docs/AGENTS.md](docs/AGENTS.md) を参照。mound を **草野球チーム運用 OS** として書き戻していく前提のガイド。
+
 ## インストール
 
 ### Homebrew (推奨)
