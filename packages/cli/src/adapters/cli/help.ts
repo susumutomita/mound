@@ -21,6 +21,13 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
   ground list [--source S] [--date YYYY-MM-DD]
   ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
+  notify add --team <ID> --kind DISCORD|SLACK|LINE --webhook <URL> [--secret S] [--target T] [--label L]
+  notify list --team <ID>
+  notify remove <ID>
+  notify test <ID> [--message TEXT]
+
+環境変数 (追加):
+  MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
 
 サブコマンドの詳細:
   mound <command> [subcommand] --help        例: mound game create --help
@@ -356,6 +363,73 @@ JSON 出力:
 JSON 出力:
   GroundSlot[] { id, slot_key, source, facility_name, date_iso, date_raw,
                  time_range, status, raw, scraped_at, first_seen_at, ingested_at }
+`,
+
+  notify: `mound notify — Discord / Slack / LINE への通知チャネル
+
+サブコマンド:
+  notify add --team <ID> --kind DISCORD|SLACK|LINE --webhook <URL> [--secret S] [--target T] [--label L]
+  notify list   --team <ID>
+  notify remove <ID>
+  notify test   <ID> [--message TEXT]
+
+トリガ:
+  - 試合の状態遷移 (game transition) が成功するとチームの enabled channel に送信
+  - 送信失敗してもドメイン操作は成功扱い (fire-and-forget)
+
+環境変数:
+  MOUND_NOTIFY_MODE=log-only   実 HTTP を叩かず stderr に出すだけ (dev/test)
+  MOUND_NOTIFY_MODE=disabled   すべての送信を no-op にする
+  未指定                       実 HTTP (Discord/Slack/LINE) を叩く
+`,
+
+  "notify add": `mound notify add — 通知チャネルを追加
+
+使い方:
+  mound notify add --team <TEAM_ID> --kind <DISCORD|SLACK|LINE> \\
+    --webhook <URL> [--secret <TOKEN>] [--target <ID>] [--label <NAME>] [--json]
+
+フラグ:
+  --team      (必須) 通知先チームの ID
+  --kind      (必須) DISCORD | SLACK | LINE
+  --webhook   (必須) Webhook URL (LINE は https://api.line.me/v2/bot/message/push)
+  --secret    (任意 / LINE 必須) チャネルアクセストークン
+  --target    (任意 / LINE 必須) 送信先 userId / groupId
+  --label     (任意) 表示名
+
+JSON 出力:
+  NotificationChannel { id, team_id, kind, webhook_url, secret, target, label,
+                        enabled, created_at, updated_at }
+`,
+
+  "notify list": `mound notify list — チームの通知チャネル一覧
+
+使い方:
+  mound notify list --team <TEAM_ID> [--json]
+
+JSON 出力:
+  NotificationChannel[] (webhook_url / secret も含む。秘匿に注意)
+`,
+
+  "notify remove": `mound notify remove — 通知チャネルを削除
+
+使い方:
+  mound notify remove <ID> [--json]
+
+JSON 出力:
+  { "ok": boolean, "id": string }
+`,
+
+  "notify test": `mound notify test — 通知チャネルに即時テスト送信
+
+使い方:
+  mound notify test <ID> [--message TEXT] [--json]
+
+フラグ:
+  --message  (任意) 送信文面 (デフォルトはテスト文)
+
+JSON 出力:
+  NotificationDeliveryResult { channel_id, channel_kind, ok, status_code, error }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

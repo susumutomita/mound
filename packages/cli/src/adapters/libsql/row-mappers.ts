@@ -2,6 +2,7 @@ import type { InValue, Row } from "@libsql/client";
 import {
   assertGameStatus,
   assertMemberRole,
+  assertNotificationKind,
   assertRsvpResponse,
 } from "../../domain/guards";
 import type {
@@ -10,6 +11,7 @@ import type {
   GroundSlot,
   Member,
   MemberRsvp,
+  NotificationChannel,
   Rsvp,
   Team,
 } from "../../domain/types";
@@ -87,6 +89,21 @@ export function rowToAuditLog(row: Row): AuditLog {
     before_json: nullable(row.before_json),
     after_json: nullable(row.after_json),
     created_at: str(row.created_at),
+  };
+}
+
+export function rowToNotificationChannel(row: Row): NotificationChannel {
+  return {
+    id: str(row.id),
+    team_id: str(row.team_id),
+    kind: assertNotificationKind(str(row.kind)),
+    webhook_url: str(row.webhook_url),
+    secret: nullable(row.secret),
+    target: nullable(row.target),
+    label: nullable(row.label),
+    enabled: Number(row.enabled) !== 0,
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
   };
 }
 

@@ -55,12 +55,23 @@ function buildCtx(opts: { now: Date; idSeed?: number }): {
     rsvps: stub,
     audit: stub,
     groundSlots,
+    notifications: stub,
+  };
+  const notifier = {
+    send: async () => ({
+      channel_id: "stub",
+      channel_kind: "stub",
+      ok: true,
+      status_code: null,
+      error: null,
+    }),
   };
   let seed = opts.idSeed ?? 0;
   return {
     store,
     ctx: {
       repo,
+      notifier,
       now: () => opts.now,
       newId: () => `gs-${++seed}`,
     },

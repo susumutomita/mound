@@ -3,6 +3,8 @@ import {
   type GameStatus,
   MEMBER_ROLES,
   type MemberRole,
+  NOTIFICATION_KINDS,
+  type NotificationKind,
   RSVP_RESPONSES,
   type RsvpResponse,
 } from "./types";
@@ -52,6 +54,20 @@ export function assertRsvpResponse(value: unknown): RsvpResponse {
 export function assertMemberRole(value: unknown): MemberRole {
   if (!isMemberRole(value)) {
     throw new DomainInvariantError(`不正な MemberRole: ${String(value)}`);
+  }
+  return value;
+}
+
+export function isNotificationKind(value: unknown): value is NotificationKind {
+  return (
+    typeof value === "string" &&
+    (NOTIFICATION_KINDS as readonly string[]).includes(value)
+  );
+}
+
+export function assertNotificationKind(value: unknown): NotificationKind {
+  if (!isNotificationKind(value)) {
+    throw new DomainInvariantError(`不正な NotificationKind: ${String(value)}`);
   }
   return value;
 }

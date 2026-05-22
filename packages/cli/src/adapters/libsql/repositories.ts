@@ -6,6 +6,7 @@ import type {
   GroundSlot,
   Member,
   MemberRsvp,
+  NotificationChannel,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
@@ -18,6 +19,7 @@ import type {
   GroundSlotFilter,
   GroundSlotRepository,
   MemberRepository,
+  NotificationChannelRepository,
   Repositories,
   RsvpRepository,
   TeamRepository,
@@ -29,6 +31,7 @@ import {
   rowToGroundSlot,
   rowToMember,
   rowToMemberRsvp,
+  rowToNotificationChannel,
   rowToRsvp,
   rowToTeam,
 } from "./row-mappers";
@@ -392,6 +395,68 @@ class LibsqlGroundSlotRepository implements GroundSlotRepository {
   }
 }
 
+class LibsqlNotificationChannelRepository
+  implements NotificationChannelRepository
+{
+  constructor(private readonly db: DbClient) {}
+
+  async insert(channel: NotificationChannel): Promise<NotificationChannel> {
+    await this.db.execute({
+      sql: `INSERT INTO notification_channels (
+              id, team_id, kind, webhook_url, secret, target, label,
+              enabled, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        channel.id,
+        channel.team_id,
+        channel.kind,
+        channel.webhook_url,
+        channel.secret,
+        channel.target,
+        channel.label,
+        channel.enabled ? 1 : 0,
+        channel.created_at,
+        channel.updated_at,
+      ],
+    });
+    return channel;
+  }
+
+  async list(teamId: string): Promise<NotificationChannel[]> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM notification_channels WHERE team_id = ? ORDER BY created_at ASC",
+      args: [teamId],
+    });
+    return r.rows.map(rowToNotificationChannel);
+  }
+
+  async listEnabled(teamId: string): Promise<NotificationChannel[]> {
+    const r = await this.db.execute({
+      sql: `SELECT * FROM notification_channels
+            WHERE team_id = ? AND enabled <> 0
+            ORDER BY created_at ASC`,
+      args: [teamId],
+    });
+    return r.rows.map(rowToNotificationChannel);
+  }
+
+  async get(id: string): Promise<NotificationChannel | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM notification_channels WHERE id = ?",
+      args: [id],
+    });
+    return r.rows[0] ? rowToNotificationChannel(r.rows[0]) : null;
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM notification_channels WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -400,5 +465,6 @@ export function buildRepositories(db: DbClient): Repositories {
     rsvps: new LibsqlRsvpRepository(db),
     audit: new LibsqlAuditRepository(db),
     groundSlots: new LibsqlGroundSlotRepository(db),
+    notifications: new LibsqlNotificationChannelRepository(db),
   };
 }

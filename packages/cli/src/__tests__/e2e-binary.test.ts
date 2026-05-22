@@ -48,7 +48,11 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
 
   beforeAll(() => {
     dbDir = mkdtempSync(join(tmpdir(), "mound-e2e-"));
-    env = { MOUND_DB_URL: `file:${join(dbDir, "deep", "mound.db")}` };
+    env = {
+      MOUND_DB_URL: `file:${join(dbDir, "deep", "mound.db")}`,
+      // 実 HTTP を叩かないよう log-only で起動
+      MOUND_NOTIFY_MODE: "log-only",
+    };
   });
 
   describe("セットアップのとき", () => {
@@ -461,6 +465,110 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
         env,
       );
       expect(r.code).toBe(2);
+    });
+  });
+
+  describe("notify チャネル管理のとき", () => {
+    it("add / list / remove のひと通りができる", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "通知テスト", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+
+      const addR = runMound(
+        [
+          "notify",
+          "add",
+          "--team",
+          team.id,
+          "--kind",
+          "DISCORD",
+          "--webhook",
+          "https://discord.com/api/webhooks/dummy",
+          "--label",
+          "main",
+          "--json",
+        ],
+        env,
+      );
+      expect(addR.code).toBe(0);
+      const channel = parseJson<{ id: string; enabled: boolean }>(addR.stdout);
+      expect(channel.enabled).toBe(true);
+
+      const listR = runMound(
+        ["notify", "list", "--team", team.id, "--json"],
+        env,
+      );
+      expect(listR.code).toBe(0);
+      expect(parseJson<unknown[]>(listR.stdout)).toHaveLength(1);
+
+      // log-only モードなのでテスト送信は ok=true で返るはず
+      const testR = runMound(
+        ["notify", "test", channel.id, "--message", "hello", "--json"],
+        env,
+      );
+      expect(testR.code).toBe(0);
+      const result = parseJson<{ ok: boolean; channel_kind: string }>(
+        testR.stdout,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.channel_kind).toBe("DISCORD");
+      // log-only sender が stderr に書き出すので mound からのテスト通知が乗る
+      expect(testR.stderr).toContain("[notify:DISCORD]");
+
+      const removeR = runMound(["notify", "remove", channel.id, "--json"], env);
+      expect(removeR.code).toBe(0);
+      expect(parseJson<{ ok: boolean }>(removeR.stdout).ok).toBe(true);
+
+      const list2R = runMound(
+        ["notify", "list", "--team", team.id, "--json"],
+        env,
+      );
+      expect(parseJson<unknown[]>(list2R.stdout)).toEqual([]);
+    });
+
+    it("game transition 後に log-only sender が stderr に書き出す", () => {
+      const tR = runMound(
+        ["team", "create", "--name", "遷移通知テスト", "--json"],
+        env,
+      );
+      const team = parseJson<{ id: string }>(tR.stdout);
+      runMound(
+        [
+          "notify",
+          "add",
+          "--team",
+          team.id,
+          "--kind",
+          "SLACK",
+          "--webhook",
+          "https://hooks.slack.com/services/dummy",
+          "--json",
+        ],
+        env,
+      );
+      const gR = runMound(
+        [
+          "game",
+          "create",
+          "--team",
+          team.id,
+          "--title",
+          "遷移通知の試合",
+          "--json",
+        ],
+        env,
+      );
+      const game = parseJson<{ id: string }>(gR.stdout);
+      const tx = runMound(
+        ["game", "transition", game.id, "--to", "COLLECTING", "--json"],
+        env,
+      );
+      expect(tx.code).toBe(0);
+      // sender が log-only → stderr に "[notify:SLACK]" + DRAFT → COLLECTING が出るはず
+      expect(tx.stderr).toContain("[notify:SLACK]");
+      expect(tx.stderr).toContain("DRAFT → COLLECTING");
     });
   });
 
