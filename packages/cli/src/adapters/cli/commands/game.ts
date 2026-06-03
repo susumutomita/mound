@@ -7,6 +7,7 @@ import {
   listGames,
   showGame,
   transitionGame,
+  updateGame,
 } from "../../../usecases/game";
 import {
   type ParsedArgs,
@@ -34,19 +35,70 @@ const statusFilterInput = z
   .optional()
   .or(z.literal("").transform(() => undefined));
 
+const updateInput = z.object({
+  title: z.string().min(1).max(120).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "date は YYYY-MM-DD 形式")
+    .optional(),
+  ground: z.string().max(80).optional(),
+  minPlayers: z.coerce.number().int().min(1).max(30).optional(),
+  note: z.string().max(500).optional(),
+});
+
 export async function runGame(
   args: ParsedArgs,
   ctx: UseCaseContext,
   opts: RenderOptions,
 ): Promise<void> {
   const sub = args.positional[0];
-  if (!sub)
-    throw new UsageError("使い方: mound game <create|list|show|transition>");
+  if (!sub) {
+    throw new UsageError(
+      "使い方: mound game <create|list|show|update|transition>",
+    );
+  }
   if (sub === "create") return create(args, ctx, opts);
   if (sub === "list") return list(args, ctx, opts);
   if (sub === "show") return show(args, ctx, opts);
+  if (sub === "update") return update(args, ctx, opts);
   if (sub === "transition") return transition(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: game ${sub}`);
+}
+
+async function update(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const id = args.positional[1];
+  if (!id) throw new UsageError("使い方: mound game update <id> [--flags]");
+  const data = parseOrUsage(updateInput, {
+    title: optionalFlag(args.flags, "title"),
+    date: optionalFlag(args.flags, "date"),
+    ground: optionalFlag(args.flags, "ground"),
+    minPlayers: optionalFlag(args.flags, "min-players"),
+    note: optionalFlag(args.flags, "note"),
+  });
+  if (
+    data.title === undefined &&
+    data.date === undefined &&
+    data.ground === undefined &&
+    data.minPlayers === undefined &&
+    data.note === undefined
+  ) {
+    throw new UsageError(
+      "--title / --date / --ground / --min-players / --note のいずれかを指定してください",
+    );
+  }
+  const game = await updateGame(ctx, {
+    gameId: id,
+    title: data.title,
+    date: data.date,
+    ground: data.ground,
+    minPlayers: data.minPlayers,
+    note: data.note,
+  });
+  emit(game, `試合を更新しました: ${game.id} (${game.title})`, opts);
 }
 
 async function create(

@@ -9,7 +9,9 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   config show                                現在の接続設定 (トークンはマスク)
   team create --name <N> [--area <A>]        チームを作成
   team list                                  チーム一覧
+  team show <ID>                             チームの profile (team+members+決め事)
   team update --team <ID> [--name <N>] [--area <A>]   名前/本拠地を編集
+  team remove <ID>                           チーム削除 (members/games/決め事も)
   member add --team <ID> --name <N> [--email <E>] [--role ADMIN|MEMBER]
   member list --team <ID>
   member update --member <ID> [--name <N>] [--email <E>] [--role ADMIN|MEMBER]
@@ -17,6 +19,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   game create --team <ID> --title <T> [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>]
   game list [--team <ID>] [--status DRAFT|COLLECTING|CONFIRMED|...]
   game show <ID>
+  game update <ID> [--title <T>] [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>]
   game transition <ID> --to COLLECTING|CONFIRMED|COMPLETED|SETTLED|CANCELLED
   rsvp set --game <ID> --member <ID> --response AVAILABLE|UNAVAILABLE|MAYBE
   rsvp list --game <ID>

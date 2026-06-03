@@ -95,6 +95,14 @@ class LibsqlTeamRepository implements TeamRepository {
     });
     return team;
   }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM teams WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
+  }
 }
 
 class LibsqlMemberRepository implements MemberRepository {
@@ -219,6 +227,23 @@ class LibsqlGameRepository implements GameRepository {
       sql: "UPDATE games SET status = ?, updated_at = ? WHERE id = ?",
       args: [status, updatedAt, id],
     });
+  }
+
+  async update(game: Game): Promise<Game> {
+    await this.db.execute({
+      sql: `UPDATE games SET title = ?, game_date = ?, ground_name = ?,
+              min_players = ?, note = ?, updated_at = ? WHERE id = ?`,
+      args: [
+        game.title,
+        game.game_date,
+        game.ground_name,
+        game.min_players,
+        game.note,
+        game.updated_at,
+        game.id,
+      ],
+    });
+    return game;
   }
 }
 

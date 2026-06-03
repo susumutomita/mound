@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { UseCaseContext } from "../../../ports";
-import { createTeam, listTeams, updateTeam } from "../../../usecases/team";
+import {
+  createTeam,
+  listTeams,
+  removeTeam,
+  showTeam,
+  updateTeam,
+} from "../../../usecases/team";
 import {
   type ParsedArgs,
   UsageError,
@@ -27,11 +33,50 @@ export async function runTeam(
   opts: RenderOptions,
 ): Promise<void> {
   const sub = args.positional[0];
-  if (!sub) throw new UsageError("使い方: mound team <create|list|update>");
+  if (!sub) {
+    throw new UsageError("使い方: mound team <create|list|show|update|remove>");
+  }
   if (sub === "create") return create(args, ctx, opts);
   if (sub === "list") return list(ctx, opts);
+  if (sub === "show") return show(args, ctx, opts);
   if (sub === "update") return update(args, ctx, opts);
+  if (sub === "remove") return remove(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: team ${sub}`);
+}
+
+async function show(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const id = args.positional[1] ?? requireFlag(args.flags, "team");
+  const profile = await showTeam(ctx, id);
+  emit(
+    profile,
+    [
+      `${profile.team.name} (${profile.team.home_area ?? "本拠地未設定"}) — ${profile.team.id}`,
+      `メンバー ${profile.members.length}人 / 決め事 ${profile.knowledge.length}件`,
+      formatRows(profile.members, ["id", "name", "role"]),
+    ].join("\n"),
+    opts,
+  );
+}
+
+async function remove(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const id = args.positional[1] ?? optionalFlag(args.flags, "team");
+  if (!id) throw new UsageError("使い方: mound team remove <ID>");
+  const removed = await removeTeam(ctx, id);
+  emit(
+    { ok: removed, id },
+    removed
+      ? `チームを削除しました: ${id} (メンバー・試合・決め事も削除)`
+      : `該当するチームが見つかりません: ${id}`,
+    opts,
+  );
 }
 
 async function update(

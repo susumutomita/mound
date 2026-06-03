@@ -214,12 +214,21 @@ Hermes は以下を **必ず守ること**:
 | `init` | — | `{ok:true}` (DB を作るだけ) |
 | `team create` | `--name --area` | `Team` |
 | `team list` | — | `Team[]` |
-| `member add` | `--team --name --email? --role?` | `Member` |
+| `team show` | `<id>` | `{team, members, knowledge}` (profile 引き継ぎ用) |
+| `team update` | `<id> --name? --area?` | `Team` |
+| `team remove` | `<id>` | `{ok, id}` (members/games/決め事も CASCADE) |
+| `member add` | `--team --name --email? --role?` | `Member` (name は表示名/ハンドル, 本名不要) |
 | `member list` | `--team` | `Member[]` |
+| `member update` | `--member --name? --email? --role?` | `Member` |
+| `member remove` | `<id>` | `{ok, id}` |
 | `game create` | `--team --title --date? --ground? --min-players? --note?` | `Game (status=DRAFT)` |
 | `game list` | `--team? --status?` | `Game[]` |
 | `game show` | `<id>` | `GameDetail` |
+| `game update` | `<id> --title? --date? --ground? --min-players? --note?` | `Game` |
 | `game transition` | `<id> --to <STATUS>` | `Game (更新後)` |
+| `export` | `--out?` | JSONL (全データ書き出し) |
+| `import` | `--file` | `{imported}` |
+| `config set` | `--db-url? --db-token?` | 接続先を ~/.mound/config.json に保存 |
 | `rsvp set` | `--game --member --response AVAILABLE\|UNAVAILABLE\|MAYBE\|NO_RESPONSE` | `Rsvp` |
 | `rsvp list` | `--game` | `MemberRsvp[]` |
 | `rsvp summary` | `--game --team?` | `RsvpSummary` |
@@ -545,7 +554,7 @@ mound に永続化したいのに「書く場所が無い」情報は、Hermes �
 | --- | --- | --- |
 | ~~チーム単位の自由メモ (チーム規約 / 連絡網 / 来季の方針 等)~~ | **解消済** → `mound knowledge set --category RULE/NOTE` / `mound observe add` | — |
 | ~~メンバー単位の自由メモ (背番号 / ポジション / 連絡時間帯 / 助っ人かレギュラーか 等)~~ | **解消済** → `mound knowledge set --member <ID> --category ROSTER` | — |
-| 既存 game の `note` を後から更新する API | (なし — 新規時のみ。暫定で `mound observe add --kind NOTE` に逃がせる) | 未起票 |
+| ~~既存 game の `note` を後から更新する API~~ | **解消済** → `mound game update <ID> --note ...`(title/date/ground/min-players も編集可) | — |
 | 対戦相手チームの情報 (連絡先 / 過去戦績 / 信頼度) | (なし) | Phase 2 想定 |
 | ~~試合の精算 / 会計~~ | **解消済** → `mound settle`(PayPay 割り勘: 割り勘計算・未払い把握・催促・自動 SETTLED)。PayPay 個人割り勘に公開 API は無いためリンクは人が貼り入金は人が消し込む | — |
 | 自然言語入力の直接受付 (`mound parse "土曜 9 時から練習試合"`) | (なし — Hermes の責務) | 未起票 |
