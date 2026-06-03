@@ -64,23 +64,25 @@ async function seed(ctx: UseCaseContext): Promise<void> {
 }
 
 const TODAY = "2026-06-03";
-const FRESH_SINCE = "2026-06-01T00:00:00.000Z"; // 48h 窓相当
+const STALE_CUTOFF = "2026-06-01T00:00:00.000Z"; // prune の鮮度しきい値
 
-describe("listGroundSlots の鮮度/未来フィルタ", () => {
-  describe("今日以降 × 直近取得で絞るとき", () => {
-    it("過去日・古い取得・テストを除外して直近の空きだけ返す", async () => {
+describe("listGroundSlots の未来フィルタ", () => {
+  describe("sinceDate=今日 で絞るとき", () => {
+    it("過去日を除外し、実行時点以降 (今日以降) の空きだけ返す", async () => {
       const { ctx } = buildFakeContext();
       await seed(ctx);
-      const slots = await listGroundSlots(ctx, {
-        sinceDate: TODAY,
-        ingestedSince: FRESH_SINCE,
-      });
-      expect(slots.map((s) => s.slot_key)).toEqual(["fresh"]);
+      const slots = await listGroundSlots(ctx, { sinceDate: TODAY });
+      const keys = slots.map((s) => s.slot_key);
+      expect(keys).not.toContain("past"); // 過去日は出さない
+      expect(keys).toContain("fresh"); // 未来日は取得時刻に関係なく出す
+      expect(
+        slots.every((s) => s.date_iso !== null && s.date_iso >= TODAY),
+      ).toBe(true);
     });
   });
 
   describe("フィルタ無し (--all 相当) のとき", () => {
-    it("全件返す", async () => {
+    it("過去日も含めて全件返す", async () => {
       const { ctx } = buildFakeContext();
       await seed(ctx);
       const slots = await listGroundSlots(ctx, {});
@@ -96,7 +98,7 @@ describe("pruneGroundSlots", () => {
       await seed(ctx);
       const deleted = await pruneGroundSlots(ctx, {
         beforeDate: TODAY,
-        ingestedBefore: FRESH_SINCE,
+        ingestedBefore: STALE_CUTOFF,
       });
       expect(deleted).toBe(3); // past + stale + test
       const remaining = await listGroundSlots(ctx, {});

@@ -439,13 +439,9 @@ class LibsqlGroundSlotRepository implements GroundSlotRepository {
       args.push(filter.dateIso);
     }
     if (filter.sinceDate) {
-      // date_iso が null の枠は日付フィルタ時は除外する。
+      // 実行時点以降の空きだけ。date_iso が null の枠は日付フィルタ時は除外する。
       where.push("date_iso IS NOT NULL AND date_iso >= ?");
       args.push(filter.sinceDate);
-    }
-    if (filter.ingestedSince) {
-      where.push("ingested_at >= ?");
-      args.push(filter.ingestedSince);
     }
     const sql = `SELECT * FROM ground_slots${
       where.length ? ` WHERE ${where.join(" AND ")}` : ""

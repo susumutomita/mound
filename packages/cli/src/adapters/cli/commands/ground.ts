@@ -122,9 +122,6 @@ const maxAgeHoursInput = z.coerce
   .min(0)
   .max(24 * 365);
 
-// 既定の鮮度窓 (時間)。これより古い取得は「もう空いてないかも」なので隠す。
-const DEFAULT_MAX_AGE_HOURS = 48;
-
 function todayIso(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
@@ -136,30 +133,22 @@ async function listCommand(
 ): Promise<void> {
   const showAll = boolFlag(args.flags, "all");
   const explicitDate = optionalFlag(args.flags, "date");
-  const now = ctx.now();
 
-  // 既定は「今日以降 × 直近 N 時間以内に取得」だけ。--all で全件、--date で特定日。
-  const maxAgeFlag = optionalFlag(args.flags, "max-age-hours");
-  const maxAgeHours = maxAgeFlag
-    ? parseOrUsage(maxAgeHoursInput, maxAgeFlag)
-    : DEFAULT_MAX_AGE_HOURS;
-  const sinceDate = showAll
-    ? undefined
-    : (optionalFlag(args.flags, "since-date") ?? todayIso(now));
-  const ingestedSince =
-    showAll || maxAgeHours === 0
+  // 既定は「実行時点以降 (= 今日以降) の空き」だけ。取得タイミングではフィルタしない。
+  // --all で過去も含む全件、--date で特定日、--since-date で起点変更。
+  const sinceDate =
+    showAll || explicitDate
       ? undefined
-      : new Date(now.getTime() - maxAgeHours * 3_600_000).toISOString();
+      : (optionalFlag(args.flags, "since-date") ?? todayIso(ctx.now()));
 
   const slots = await listGroundSlots(ctx, {
     source: optionalFlag(args.flags, "source"),
     dateIso: explicitDate,
-    sinceDate: explicitDate ? undefined : sinceDate,
-    ingestedSince,
+    sinceDate,
   });
   const header = showAll
     ? `${slots.length} 件 (全件)`
-    : `${slots.length} 件 (今日以降 × 直近 ${maxAgeHours}h 取得ぶん。全件は --all)`;
+    : `${slots.length} 件 (${sinceDate ?? "指定日"} 以降の空き。過去も見るなら --all)`;
   emit(
     slots,
     [

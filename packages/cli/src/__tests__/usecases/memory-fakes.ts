@@ -284,8 +284,7 @@ export function buildFakeContext(
             (!f.source || s.source === f.source) &&
             (!f.dateIso || s.date_iso === f.dateIso) &&
             (!f.sinceDate ||
-              (s.date_iso !== null && s.date_iso >= f.sinceDate)) &&
-            (!f.ingestedSince || s.ingested_at >= f.ingestedSince),
+              (s.date_iso !== null && s.date_iso >= f.sinceDate)),
         ),
       listNewerThan: async (f) =>
         Array.from(groundSlots.values()).filter(

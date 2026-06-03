@@ -28,7 +28,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
-  ground list [--source S] [--date YYYY-MM-DD] [--all] [--max-age-hours N]  既定=今日以降×直近48h
+  ground list [--source S] [--date YYYY-MM-DD] [--all]  既定=実行時点以降の空き
   ground prune [--before-date YYYY-MM-DD] [--max-age-hours N]  過去/古い/テストを掃除
   ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
   ground sync [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T]
@@ -539,19 +539,17 @@ JSON 出力:
   "ground list": `mound ground list — 取り込み済みの空き枠を表示
 
 使い方:
-  mound ground list [--source <SOURCE>] [--date YYYY-MM-DD] [--all] [--max-age-hours N] [--since-date YYYY-MM-DD] [--json]
+  mound ground list [--source <SOURCE>] [--date YYYY-MM-DD] [--all] [--since-date YYYY-MM-DD] [--json]
 
-既定の絞り込み (古い/過去のゴミを出さないため):
-  - 今日以降の日付 (date_iso >= today) のみ
-  - 直近 48h 以内に取得 (ingested_at) した枠のみ
-  → cron で定期 sync していれば「いま本当に空いている枠」だけが出る。
+既定の絞り込み:
+  - 実行時点以降 (date_iso >= 今日) の空きだけ。過去日は出さない。
+  - 取得タイミング (ingested_at) ではフィルタしない。古い取得のゴミは ground prune で消す。
 
 フラグ:
-  --source         (任意) スクレイパ source ID (yokohama, kanagawa, ...)
-  --date           (任意) 特定日 (YYYY-MM-DD) だけ
-  --all            (任意) 既定フィルタを外して全件
-  --max-age-hours  (任意) 鮮度窓を時間で変更 (既定 48, 0=無制限)
-  --since-date     (任意) この日以降に変更 (既定 today)
+  --source      (任意) スクレイパ source ID (yokohama, kanagawa, ...)
+  --date        (任意) 特定日 (YYYY-MM-DD) だけ
+  --all         (任意) 過去日も含めて全件
+  --since-date  (任意) 起点日を変更 (既定 today)
 
 JSON 出力:
   GroundSlot[] { id, slot_key, source, facility_name, date_iso, date_raw,
