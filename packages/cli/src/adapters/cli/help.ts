@@ -65,9 +65,10 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   mound <command> [subcommand] --help        例: mound game create --help
 
 グローバルフラグ:
-  --json       JSON 出力 (エージェント連携向け)
-  --help       このヘルプ
-  --version    バージョン
+  --output FMT  出力形式 text | json | tsv | csv (既定 text)。AWS CLI 風
+  --json        --output json の別名 (エージェント連携向け)
+  --help        このヘルプ
+  --version     バージョン
 
 接続先の決定順:
   環境変数 > ~/.mound/config.json (mound config set) > 既定 (~/.mound/mound.db)
