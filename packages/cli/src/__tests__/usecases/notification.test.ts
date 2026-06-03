@@ -86,6 +86,9 @@ function buildFake(opts?: { senderError?: Error }): Fake {
     groundSlots,
     notifications: notificationRepo,
     groundWatches: emptyWatches,
+    observations: stub,
+    knowledge: stub,
+    settlements: stub,
   };
 
   const notifier: NotificationSender = {

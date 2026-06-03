@@ -109,7 +109,11 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       );
       expect(parseJson<unknown[]>(listR.stdout)).toHaveLength(10);
 
-      // 試合を DRAFT で作成
+      // 試合を DRAFT で作成。日付は実時計基準の未来日にする
+      // (固定日だと wall-clock が過ぎた瞬間 agenda.upcoming から外れて落ちるため)。
+      const gameDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
       const gameR = runMound(
         [
           "game",
@@ -119,7 +123,7 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
           "--title",
           "練習試合",
           "--date",
-          "2026-06-01",
+          gameDate,
           "--ground",
           "公園グラウンド",
           "--min-players",

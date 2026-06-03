@@ -57,6 +57,9 @@ function buildCtx(opts: { now: Date; idSeed?: number }): {
     groundSlots,
     notifications: stub,
     groundWatches: stub,
+    observations: stub,
+    knowledge: stub,
+    settlements: stub,
   };
   const notifier = {
     send: async () => ({

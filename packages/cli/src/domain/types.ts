@@ -115,6 +115,37 @@ export interface NotificationChannel {
   updated_at: string;
 }
 
+// === 精算 (PayPay 割り勘) ===
+// 試合 1 件につき精算 1 件。参加者で会場費等を割り勘し、PayPay リンクを貼って
+// 催促・消し込みする。全員払ったら status=SETTLED になり、game も SETTLED へ進む。
+// (PayPay 個人割り勘に公開 API は無いため、リンクは人が貼り入金は人が消し込む)
+export const SETTLEMENT_STATUSES = ["OPEN", "SETTLED"] as const;
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
+export interface Settlement {
+  id: string;
+  game_id: string;
+  team_id: string;
+  total_amount: number; // 合計 (円)
+  payment_link: string | null; // PayPay 割り勘 / 受け取りリンク
+  payment_label: string | null; // 例: "PayPay: 田中宛"
+  note: string | null;
+  status: SettlementStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SettlementShare {
+  id: string;
+  settlement_id: string;
+  member_id: string;
+  amount: number; // この人の負担 (円)。割り勘の端数も含め合計は total に一致
+  paid: boolean;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // 曜日コード (ISO weekday の小文字 3 文字)。watch.weekdays は CSV で持つ。
 export const WEEKDAY_CODES = [
   "sun",
@@ -140,6 +171,67 @@ export interface GroundWatch {
   time_from: string | null; // 'HH:MM' / null=任意 (slot の開始がこれ以降)
   time_to: string | null; // 'HH:MM' / null=任意 (slot の終了がこれ以前)
   enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// === チーム記憶レイヤ (Medallion: Bronze→Silver→Gold) ===
+// mound は「チームの記憶」。決め事を mound (libSQL/SQLite) に貯めることで、
+// 駆動するエージェント (Hermes / Codex / Claude) を差し替えても同じ文脈から動ける。
+
+// 🥉 Bronze: エージェントが会話などで得た「生の観測」。追記専用・不変。
+// 構造を決めずにまず書き留める層 (例: 「土曜の朝が動きやすい」「鈴木は隔週」)。
+export const OBSERVATION_KINDS = [
+  "PREFERENCE_HINT", // 既定値のヒント (動きやすい曜日・時間帯など)
+  "ROSTER_FACT", // メンバーに関する事実 (背番号/ポジション/常連か等)
+  "VENUE", // 会場に関する知見
+  "RULE", // 規約・会費・連絡網など
+  "OPPONENT", // 対戦相手に関する知見
+  "NOTE", // その他の自由メモ
+] as const;
+export type ObservationKind = (typeof OBSERVATION_KINDS)[number];
+
+export interface Observation {
+  id: string;
+  team_id: string;
+  member_id: string | null; // メンバー固有の観測なら紐づける
+  kind: ObservationKind;
+  subject: string | null; // 任意の見出し
+  body: string; // 観測の中身
+  source: string | null; // 出所 ("会話 2026-06-03" 等)
+  observed_at: string;
+  created_at: string;
+}
+
+// 🥇 Gold: 確信度付きの「チームの決め事」。供給用 (autopilot / 任意のエージェントが
+// 読んで行動する層)。(team_id, member_id, key) で一意 = upsert する。
+export const KNOWLEDGE_CATEGORIES = [
+  "PREFERENCE", // 既定値 (default_ground / default_weekday / fee_per_person 等)
+  "RULE", // 規約・会費ルール・ドタキャン規定
+  "ROSTER", // メンバー固有の知識
+  "VENUE", // 会場の知見
+  "OPPONENT", // 対戦相手の知見
+  "NOTE", // その他
+] as const;
+export type KnowledgeCategory = (typeof KNOWLEDGE_CATEGORIES)[number];
+
+// 決め事の出所。HUMAN = 人/エージェントが明示設定 (権威があり、学習値に上書きされない)。
+// LEARNED = 実績から学習したもの。
+export const KNOWLEDGE_ORIGINS = ["HUMAN", "LEARNED"] as const;
+export type KnowledgeOrigin = (typeof KNOWLEDGE_ORIGINS)[number];
+
+export interface TeamKnowledge {
+  id: string;
+  team_id: string;
+  member_id: string | null;
+  category: KnowledgeCategory;
+  key: string; // default_ground / fee_per_person / position 等
+  value: string;
+  origin: KnowledgeOrigin;
+  confidence: number; // 0.0–1.0
+  evidence_count: number; // 観測/裏付けの累積回数 (使うほど厚くなる)
+  source: string | null;
+  last_observed_at: string | null;
   created_at: string;
   updated_at: string;
 }

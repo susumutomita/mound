@@ -8,10 +8,15 @@ import type {
   Member,
   MemberRsvp,
   NotificationChannel,
+  Observation,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
+  Settlement,
+  SettlementShare,
+  SettlementStatus,
   Team,
+  TeamKnowledge,
 } from "../../domain/types";
 import type {
   AuditRepository,
@@ -20,10 +25,15 @@ import type {
   GroundSlotFilter,
   GroundSlotRepository,
   GroundWatchRepository,
+  KnowledgeFilter,
   MemberRepository,
   NotificationChannelRepository,
+  ObservationFilter,
+  ObservationRepository,
   Repositories,
   RsvpRepository,
+  SettlementRepository,
+  TeamKnowledgeRepository,
   TeamRepository,
 } from "../../ports";
 import type { DbClient } from "./client";
@@ -35,8 +45,12 @@ import {
   rowToMember,
   rowToMemberRsvp,
   rowToNotificationChannel,
+  rowToObservation,
   rowToRsvp,
+  rowToSettlement,
+  rowToSettlementShare,
   rowToTeam,
+  rowToTeamKnowledge,
 } from "./row-mappers";
 
 class LibsqlTeamRepository implements TeamRepository {
@@ -520,6 +534,247 @@ class LibsqlGroundWatchRepository implements GroundWatchRepository {
   }
 }
 
+class LibsqlObservationRepository implements ObservationRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(observation: Observation): Promise<Observation> {
+    await this.db.execute({
+      sql: `INSERT INTO observations (
+              id, team_id, member_id, kind, subject, body, source,
+              observed_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        observation.id,
+        observation.team_id,
+        observation.member_id,
+        observation.kind,
+        observation.subject,
+        observation.body,
+        observation.source,
+        observation.observed_at,
+        observation.created_at,
+      ],
+    });
+    return observation;
+  }
+
+  async list(filter: ObservationFilter): Promise<Observation[]> {
+    const where: string[] = ["team_id = ?"];
+    const args: InValue[] = [filter.teamId];
+    if (filter.kind) {
+      where.push("kind = ?");
+      args.push(filter.kind);
+    }
+    if (filter.memberId) {
+      where.push("member_id = ?");
+      args.push(filter.memberId);
+    }
+    const r = await this.db.execute({
+      sql: `SELECT * FROM observations WHERE ${where.join(" AND ")}
+            ORDER BY observed_at DESC`,
+      args,
+    });
+    return r.rows.map(rowToObservation);
+  }
+}
+
+class LibsqlTeamKnowledgeRepository implements TeamKnowledgeRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(entry: TeamKnowledge): Promise<TeamKnowledge> {
+    await this.db.execute({
+      sql: `INSERT INTO team_knowledge (
+              id, team_id, member_id, category, key, value, origin,
+              confidence, evidence_count, source, last_observed_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        entry.id,
+        entry.team_id,
+        entry.member_id,
+        entry.category,
+        entry.key,
+        entry.value,
+        entry.origin,
+        entry.confidence,
+        entry.evidence_count,
+        entry.source,
+        entry.last_observed_at,
+        entry.created_at,
+        entry.updated_at,
+      ],
+    });
+    return entry;
+  }
+
+  async update(entry: TeamKnowledge): Promise<TeamKnowledge> {
+    await this.db.execute({
+      sql: `UPDATE team_knowledge SET
+              category = ?, value = ?, origin = ?, confidence = ?,
+              evidence_count = ?, source = ?, last_observed_at = ?, updated_at = ?
+            WHERE id = ?`,
+      args: [
+        entry.category,
+        entry.value,
+        entry.origin,
+        entry.confidence,
+        entry.evidence_count,
+        entry.source,
+        entry.last_observed_at,
+        entry.updated_at,
+        entry.id,
+      ],
+    });
+    return entry;
+  }
+
+  async getByKey(
+    teamId: string,
+    memberId: string | null,
+    key: string,
+  ): Promise<TeamKnowledge | null> {
+    // member_id は NULL を含むため = ではなく IS NULL で分岐する。
+    const memberClause =
+      memberId === null ? "member_id IS NULL" : "member_id = ?";
+    const args: InValue[] =
+      memberId === null ? [teamId, key] : [teamId, memberId, key];
+    const r = await this.db.execute({
+      sql: `SELECT * FROM team_knowledge
+            WHERE team_id = ? AND ${memberClause} AND key = ?`,
+      args,
+    });
+    return r.rows[0] ? rowToTeamKnowledge(r.rows[0]) : null;
+  }
+
+  async list(filter: KnowledgeFilter): Promise<TeamKnowledge[]> {
+    const where: string[] = ["team_id = ?"];
+    const args: InValue[] = [filter.teamId];
+    if (filter.category) {
+      where.push("category = ?");
+      args.push(filter.category);
+    }
+    if (filter.memberId) {
+      where.push("member_id = ?");
+      args.push(filter.memberId);
+    }
+    if (filter.key) {
+      where.push("key = ?");
+      args.push(filter.key);
+    }
+    const r = await this.db.execute({
+      sql: `SELECT * FROM team_knowledge WHERE ${where.join(" AND ")}
+            ORDER BY category ASC, key ASC, created_at ASC`,
+      args,
+    });
+    return r.rows.map(rowToTeamKnowledge);
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM team_knowledge WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
+  }
+}
+
+class LibsqlSettlementRepository implements SettlementRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(settlement: Settlement): Promise<Settlement> {
+    await this.db.execute({
+      sql: `INSERT INTO settlements (
+              id, game_id, team_id, total_amount, payment_link, payment_label,
+              note, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        settlement.id,
+        settlement.game_id,
+        settlement.team_id,
+        settlement.total_amount,
+        settlement.payment_link,
+        settlement.payment_label,
+        settlement.note,
+        settlement.status,
+        settlement.created_at,
+        settlement.updated_at,
+      ],
+    });
+    return settlement;
+  }
+
+  async getByGame(gameId: string): Promise<Settlement | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM settlements WHERE game_id = ?",
+      args: [gameId],
+    });
+    return r.rows[0] ? rowToSettlement(r.rows[0]) : null;
+  }
+
+  async updateStatus(
+    id: string,
+    status: SettlementStatus,
+    updatedAt: string,
+  ): Promise<void> {
+    await this.db.execute({
+      sql: "UPDATE settlements SET status = ?, updated_at = ? WHERE id = ?",
+      args: [status, updatedAt, id],
+    });
+  }
+
+  async insertShare(share: SettlementShare): Promise<SettlementShare> {
+    await this.db.execute({
+      sql: `INSERT INTO settlement_shares (
+              id, settlement_id, member_id, amount, paid, paid_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        share.id,
+        share.settlement_id,
+        share.member_id,
+        share.amount,
+        share.paid ? 1 : 0,
+        share.paid_at,
+        share.created_at,
+        share.updated_at,
+      ],
+    });
+    return share;
+  }
+
+  async listShares(settlementId: string): Promise<SettlementShare[]> {
+    const r = await this.db.execute({
+      sql: `SELECT * FROM settlement_shares WHERE settlement_id = ?
+            ORDER BY created_at ASC`,
+      args: [settlementId],
+    });
+    return r.rows.map(rowToSettlementShare);
+  }
+
+  async getShare(
+    settlementId: string,
+    memberId: string,
+  ): Promise<SettlementShare | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM settlement_shares WHERE settlement_id = ? AND member_id = ?",
+      args: [settlementId, memberId],
+    });
+    return r.rows[0] ? rowToSettlementShare(r.rows[0]) : null;
+  }
+
+  async updateSharePaid(
+    id: string,
+    paid: boolean,
+    paidAt: string | null,
+    updatedAt: string,
+  ): Promise<void> {
+    await this.db.execute({
+      sql: "UPDATE settlement_shares SET paid = ?, paid_at = ?, updated_at = ? WHERE id = ?",
+      args: [paid ? 1 : 0, paidAt, updatedAt, id],
+    });
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -530,5 +785,8 @@ export function buildRepositories(db: DbClient): Repositories {
     groundSlots: new LibsqlGroundSlotRepository(db),
     notifications: new LibsqlNotificationChannelRepository(db),
     groundWatches: new LibsqlGroundWatchRepository(db),
+    observations: new LibsqlObservationRepository(db),
+    knowledge: new LibsqlTeamKnowledgeRepository(db),
+    settlements: new LibsqlSettlementRepository(db),
   };
 }

@@ -30,6 +30,11 @@ import type {
 
 import { TransitionDeniedError } from "../../usecases/errors";
 import { createGame, showGame, transitionGame } from "../../usecases/game";
+import {
+  buildKnowledgeRepo,
+  buildObservationRepo,
+  buildSettlementRepo,
+} from "./memory-fakes";
 
 interface Fake {
   teamStore: Map<string, Team>;
@@ -231,6 +236,9 @@ function buildFake(): Fake {
       groundSlots,
       notifications,
       groundWatches,
+      observations: buildObservationRepo().repo,
+      knowledge: buildKnowledgeRepo().repo,
+      settlements: buildSettlementRepo().repo,
     },
   };
 }

@@ -31,6 +31,19 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   watch list --team <ID>
   watch remove <ID>
   watch test --team <ID>
+  observe add --team <ID> --kind <KIND> --body <TEXT> [--member <ID>] [--subject S] [--source S]
+  observe list --team <ID> [--kind <KIND>] [--member <ID>]
+  knowledge set --team <ID> --key <K> --value <V> [--category C] [--member ID] [--origin HUMAN|LEARNED] [--confidence 0..1] [--source S]
+  knowledge list --team <ID> [--category C] [--member ID] [--key K]
+  knowledge get --team <ID> --key <K> [--member ID]
+  knowledge forget <ID>
+  learn --team <ID> [--apply]                過去の試合・出欠から決め事を学習
+  auto plan --team <ID> [--horizon-days N]    いま打つべき手を算出 (read-only)
+  auto run --team <ID> [--apply] [--horizon-days N]  安全な手は自動・拘束する手は提案
+  settle open --game <ID> --amount <YEN> [--link URL] [--label L] [--note N] [--members CSV]
+  settle show --game <ID>
+  settle pay --game <ID> --member <ID> [--unpaid]
+  settle remind --game <ID>                   PayPay 割り勘の催促を通知
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -576,6 +589,148 @@ JSON 出力:
 
 JSON 出力:
   { "count": number, "slots": GroundSlot[] }
+`,
+
+  observe: `mound observe — チームの記憶 (Bronze): 会話で得た生の観測を追記
+
+サブコマンド:
+  observe add  --team <ID> --kind <KIND> --body <TEXT> [--member <ID>] [--subject S] [--source S] [--json]
+  observe list --team <ID> [--kind <KIND>] [--member <ID>] [--json]
+
+KIND:
+  PREFERENCE_HINT | ROSTER_FACT | VENUE | RULE | OPPONENT | NOTE
+
+狙い:
+  「土曜の朝が動きやすい」「鈴木は隔週で来る」など、構造を決めずまず書き留める層。
+  状態は mound (libSQL/SQLite) に永続化されるので、駆動エージェント (Hermes/Codex/Claude)
+  を差し替えても同じチーム文脈から再開できる。型付きの決め事は knowledge set へ昇格。
+
+JSON 出力:
+  Observation { id, team_id, member_id, kind, subject, body, source, observed_at, created_at }
+
+エラー:
+  - TeamNotFoundError / MemberNotFoundError (exit 2)
+`,
+
+  knowledge: `mound knowledge — チームの記憶 (Gold): 確信度付きの「決め事」
+
+サブコマンド:
+  knowledge set    --team <ID> --key <K> --value <V> [--category C] [--member ID] \\
+                   [--origin HUMAN|LEARNED] [--confidence 0..1] [--source S] [--json]
+  knowledge list   --team <ID> [--category C] [--member ID] [--key K] [--json]
+  knowledge get    --team <ID> --key <K> [--member ID] [--json]
+  knowledge forget <ID> [--json]
+
+category: PREFERENCE | RULE | ROSTER | VENUE | OPPONENT | NOTE (既定: NOTE)
+origin:   HUMAN (人が明示, 既定) | LEARNED (実績から学習)
+
+マージ規則 ((team, member, key) で upsert):
+  - HUMAN は LEARNED に上書きされない (人の決め事をピン留め)
+  - LEARNED 同士は confidence が高い方が値を握る
+  - 観測のたび evidence_count を加算 (使うほど裏付けが厚くなる)
+
+代表的な key (PREFERENCE):
+  default_ground / default_weekday / default_time / default_min_players /
+  reminder_lead_days / fee_per_person
+
+JSON 出力:
+  TeamKnowledge { id, team_id, member_id, category, key, value, origin,
+                  confidence, evidence_count, source, last_observed_at,
+                  created_at, updated_at }
+
+エラー:
+  - TeamNotFoundError / MemberNotFoundError (exit 2)
+`,
+
+  learn: `mound learn — 過去の試合・出欠からチームの決め事を学習 (Silver→Gold)
+
+使い方:
+  mound learn --team <TEAM_ID> [--apply] [--json]
+
+フラグ:
+  --team    (必須) チーム ID
+  --apply   (任意) Gold (team_knowledge) に反映する。未指定は dry-run (提案のみ)
+
+学習する決め事:
+  - default_ground   : よく使う会場 (ground_name の最頻値)
+  - default_weekday  : よくやる曜日 (game_date の曜日の最頻値)
+  - attendance_rate  : メンバーごとの出席率 (回答試合中 AVAILABLE の割合)
+
+挙動:
+  - 毎回その時点の履歴から再計算する (傾向が変われば値も入れ替わる = 降格も効く)
+  - origin=HUMAN の決め事は touch しない (ピン留め)。pinned_skips で報告
+  - 最低 2 件の裏付けがある決め事だけを出す
+
+JSON 出力:
+  {
+    "team_id": string,
+    "generated_at": ISO8601,
+    "applied": boolean,
+    "facts": [{ category, key, value, confidence, evidence_count, member_id, member_name, rationale }],
+    "pinned_skips": string[]
+  }
+`,
+
+  settle: `mound settle — 精算 (PayPay 割り勘): 割り勘計算・未払い把握・催促・自動完了
+
+サブコマンド:
+  settle open   --game <ID> --amount <YEN> [--link URL] [--label L] [--note N] [--members CSV] [--json]
+  settle show   --game <ID> [--json]
+  settle pay    --game <ID> --member <ID> [--unpaid] [--json]
+  settle remind --game <ID> [--json]
+
+挙動:
+  - open: 合計金額を参加者 (既定: RSVP=AVAILABLE のメンバー / --members で明示) で割り勘し、
+          端数は先頭から 1 円ずつ調整して合計を一致させる。試合 1 件につき 1 精算。
+  - pay:  支払いを消し込む。全員払うと settlement=SETTLED になり、COMPLETED の試合は
+          自動で SETTLED へ進む (--unpaid で取り消し)。
+  - remind: PayPay リンク + 1人あたり + 未払い者を催促文にしてチームの通知チャネルへ送信。
+
+備考:
+  PayPay 個人割り勘に公開 API は無いため、リンクは人が貼り、入金は人が消し込む。
+  mound は割り勘額の計算・未払いの把握・催促文の生成・精算完了の自動遷移を担う。
+
+JSON 出力 (open/show/pay):
+  {
+    "settlement": { id, game_id, team_id, total_amount, payment_link, payment_label, note, status, ... },
+    "shares": [{ member_id, member_name, amount, paid, paid_at, ... }],
+    "summary": { participants, paid_count, unpaid_count, collected, outstanding, total }
+  }
+
+エラー:
+  - GameNotFoundError (exit 2)
+  - SettlementError: 参加者ゼロ / 精算二重作成 / 精算未作成 / 金額不正 (exit 2)
+`,
+
+  auto: `mound auto — autopilot: いま打つべき手を算出し、安全な手は自動・拘束する手は提案
+
+サブコマンド:
+  auto plan --team <ID> [--horizon-days N] [--json]            read-only。打つべき手の一覧
+  auto run  --team <ID> [--apply] [--horizon-days N] [--json]  SAFE な手を自動実行 (--apply 時)
+
+原則「AI は提案する。人が最後に決める」:
+  - SAFE          … --apply で自動実行
+      PUBLISH            DRAFT → COLLECTING (出欠回収を開始)
+      COMPLETE          CONFIRMED → COMPLETED (試合日が経過)
+      REMIND_COLLECTING 出欠が足りない試合へリマインド通知
+      REMIND_SETTLEMENT 精算待ちへリマインド通知
+  - NEEDS_APPROVAL … 常に提案のみ (人が実行)
+      CONFIRM           COLLECTING → CONFIRMED (人数充足、チームを拘束する確定)
+
+挙動:
+  - agenda (現在状態) を読んで手を導出する
+  - 遷移は既存の game transition を呼ぶ (ガード・監査・通知が自動で効く)
+  - cron で定期実行すれば人手ゼロで回り続ける。駆動は Hermes/Codex/Claude でも可
+
+JSON 出力 (auto run):
+  {
+    "team_id": string, "generated_at": ISO8601, "horizon_days": number,
+    "applied": boolean,
+    "actions": AutoAction[],
+    "executed": [{ action, ok, error, deliveries? }],
+    "proposed": AutoAction[]
+  }
+  AutoAction = { kind, risk, game_id, game_title, reason, transition_to, message }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

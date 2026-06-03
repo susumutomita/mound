@@ -1,9 +1,13 @@
 import type { InValue, Row } from "@libsql/client";
 import {
   assertGameStatus,
+  assertKnowledgeCategory,
+  assertKnowledgeOrigin,
   assertMemberRole,
   assertNotificationKind,
+  assertObservationKind,
   assertRsvpResponse,
+  assertSettlementStatus,
 } from "../../domain/guards";
 import type {
   AuditLog,
@@ -13,8 +17,12 @@ import type {
   Member,
   MemberRsvp,
   NotificationChannel,
+  Observation,
   Rsvp,
+  Settlement,
+  SettlementShare,
   Team,
+  TeamKnowledge,
 } from "../../domain/types";
 
 export const str = (v: InValue): string => String(v);
@@ -119,6 +127,66 @@ export function rowToGroundWatch(row: Row): GroundWatch {
     time_from: nullable(row.time_from),
     time_to: nullable(row.time_to),
     enabled: Number(row.enabled) !== 0,
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToObservation(row: Row): Observation {
+  return {
+    id: str(row.id),
+    team_id: str(row.team_id),
+    member_id: nullable(row.member_id),
+    kind: assertObservationKind(str(row.kind)),
+    subject: nullable(row.subject),
+    body: str(row.body),
+    source: nullable(row.source),
+    observed_at: str(row.observed_at),
+    created_at: str(row.created_at),
+  };
+}
+
+export function rowToTeamKnowledge(row: Row): TeamKnowledge {
+  return {
+    id: str(row.id),
+    team_id: str(row.team_id),
+    member_id: nullable(row.member_id),
+    category: assertKnowledgeCategory(str(row.category)),
+    key: str(row.key),
+    value: str(row.value),
+    origin: assertKnowledgeOrigin(str(row.origin)),
+    confidence: Number(row.confidence),
+    evidence_count: Number(row.evidence_count),
+    source: nullable(row.source),
+    last_observed_at: nullable(row.last_observed_at),
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToSettlement(row: Row): Settlement {
+  return {
+    id: str(row.id),
+    game_id: str(row.game_id),
+    team_id: str(row.team_id),
+    total_amount: Number(row.total_amount),
+    payment_link: nullable(row.payment_link),
+    payment_label: nullable(row.payment_label),
+    note: nullable(row.note),
+    status: assertSettlementStatus(str(row.status)),
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToSettlementShare(row: Row): SettlementShare {
+  return {
+    id: str(row.id),
+    settlement_id: str(row.settlement_id),
+    member_id: str(row.member_id),
+    amount: Number(row.amount),
+    paid: Number(row.paid) !== 0,
+    paid_at: nullable(row.paid_at),
     created_at: str(row.created_at),
     updated_at: str(row.updated_at),
   };

@@ -26,8 +26,55 @@ Hermes はユーザとの会話で **チームの運営に関する知見** を�
 | 試合の状態が変わった (公開 / 確定 / 中止 / 完了 / 精算) | `Game.status` | `mound game transition --to <STATUS>` |
 | 通知したいチャネルを教わった (Discord/Slack/LINE) | `NotificationChannel` | `mound notify add --team --kind --webhook` |
 | 「土日午前の野球場だけ通知して」「軟式野球場の夕方だけ」など監視条件 | `GroundWatch` | `mound watch add --team [--source --facility --weekdays --time-from --time-to --label]` |
+| チームの**決め事** (いつもの会場/曜日/最低人数/会費/リマインド何日前) | `TeamKnowledge` (🥇 Gold) | `mound knowledge set --team --key <K> --value <V> [--category PREFERENCE]` |
+| メンバー固有の知識 (背番号/ポジション/常連か/連絡時間帯) | `TeamKnowledge` (🥇 Gold) | `mound knowledge set --team --member <ID> --category ROSTER --key <K> --value <V>` |
+| 会話で得た**生の知見** (「土曜の朝が動きやすい」「鈴木は隔週」「三ツ沢は取りやすい」) | `Observation` (🥉 Bronze) | `mound observe add --team --kind <KIND> --body <TEXT> [--member --source]` |
 | 試合に関する自由メモ (例: 「対戦相手は連絡待ち」「会場 OK 取れたら note 更新」) | `Game.note` | `mound game create` の `--note` (新規時) — 既存 game への note 更新 API は未実装、後述 |
 | グラウンド予約システムの空き状況 | `GroundSlot` | `mound ground sync --region all` で自動取り込み |
+
+#### チーム記憶レイヤ — 「使うほど賢くなる」決め事ストア (Medallion)
+
+`observe` / `knowledge` は **チームのコンテキストを学習して貯める層** です。状態は mound
+(libSQL/SQLite) に永続化されるので、**駆動するエージェントを Hermes → Codex → Claude と
+差し替えても、同じチーム文脈から再開できます** (これがチーム OS の肝)。エージェント固有の
+memory には書かず、必ずここに書き戻してください。
+
+- 🥉 **Bronze = `observe`**: 構造を決めず**まず書き留める**生の観測。`kind` は
+  `PREFERENCE_HINT / ROSTER_FACT / VENUE / RULE / OPPONENT / NOTE`。
+- 🥇 **Gold = `knowledge`**: `(team, member, key)` で一意な**確信度付きの決め事**。
+  autopilot や Hermes が「いつもの会場・曜日・最低人数」を**人に聞かずに**埋めるために読む層。
+  - `origin=HUMAN` (人が明示) は `origin=LEARNED` (実績から学習) に**上書きされない** = 人の決め事をピン留め
+  - `LEARNED` 同士は `confidence` が高い方が値を握る
+  - 観測のたび `evidence_count` が加算される (= 使うほど裏付けが厚くなる)
+
+セッション開始時は `mound knowledge list --team T --json` と `mound observe list --team T --json`
+を読めば、そのチームの決め事・知見をまるごと引き継げます。
+
+#### 使うほど賢くなる: `mound learn`
+
+`mound learn --team T` は過去の試合・出欠から **default_ground / default_weekday /
+メンバー出席率** を確信度付きで再導出し、`--apply` で Gold に LEARNED として書き戻します
+(`origin=HUMAN` の決め事はピン留めされ触られません)。定期的に回すほどチームの「いつもの」が
+育ちます。Hermes は試合が一区切りした (`SETTLED`/`COMPLETED`) タイミングや日次で実行すると良いです。
+
+#### 自律運用: `mound auto` + cron
+
+`mound auto run --team T --apply` は現在状態 (agenda) から打つべき手を算出し、**安全な手は自動実行・
+チームを拘束する手は提案**に分けます。
+
+- SAFE (自動): `PUBLISH` (DRAFT→COLLECTING) / `COMPLETE` (試合日経過→COMPLETED) / 出欠・精算リマインド通知
+- NEEDS_APPROVAL (提案のみ): `CONFIRM` (人数充足→CONFIRMED。チームを拘束するので人が決める)
+
+cron/launchd で定期実行すれば**人手ゼロで回り続けます**。Hermes が運用ループを担う場合は
+`mound auto plan --json` を読み、SAFE は自動で `auto run --apply`、`proposed` の NEEDS_APPROVAL は
+ユーザに確認してから個別に `mound game transition` を叩く、という分担が綺麗です。
+
+```bash
+# 例: 30 分おきに球場同期 + 自律運用 (SAFE のみ自動)
+*/30 * * * * mound ground sync --region all --notify --team "$TEAM" --json >/dev/null
+0    8 * * * mound auto run --team "$TEAM" --apply --json >>~/.mound/auto.log
+0    9 * * 1 mound learn --team "$TEAM" --apply --json >>~/.mound/learn.log
+```
 
 **会話で発見した情報は、書ける所があるなら必ず書く。書けない情報があれば §9 の「現在書けないこと」に該当するので、Hermes はそれを **未解決 task として TODO 化** してユーザに告知してください**。
 
@@ -191,6 +238,19 @@ Hermes は以下を **必ず守ること**:
 | `watch list` | `--team` | `GroundWatch[]` |
 | `watch remove` | `<id>` | `{ok, id}` |
 | `watch test` | `--team` | `{count, slots}` |
+| `observe add` | `--team --kind --body [--member --subject --source]` | `Observation` |
+| `observe list` | `--team [--kind --member]` | `Observation[]` |
+| `knowledge set` | `--team --key --value [--category --member --origin --confidence --source]` | `TeamKnowledge` |
+| `knowledge list` | `--team [--category --member --key]` | `TeamKnowledge[]` |
+| `knowledge get` | `--team --key [--member]` | `TeamKnowledge \| {found:false}` |
+| `knowledge forget` | `<id>` | `{ok, id}` |
+| `learn` | `--team [--apply]` | `LearnResult` (履歴から決め事を学習) |
+| `auto plan` | `--team [--horizon-days]` | `AutoPlan` (打つべき手, read-only) |
+| `auto run` | `--team [--apply --horizon-days]` | `AutoRunResult` (SAFE は自動・要承認は提案) |
+| `settle open` | `--game --amount [--link --label --note --members]` | `SettlementView` (PayPay 割り勘を作成) |
+| `settle show` | `--game` | `SettlementView \| {found:false}` |
+| `settle pay` | `--game --member [--unpaid]` | `SettlementView` (全額で自動 SETTLED) |
+| `settle remind` | `--game` | `{message, deliveries}` (PayPay 催促を通知) |
 
 サブコマンドの詳細は `mound <command> [sub] --help` で取れます (実装は `packages/cli/src/adapters/cli/help.ts`)。
 
@@ -483,11 +543,11 @@ mound に永続化したいのに「書く場所が無い」情報は、Hermes �
 
 | 書けないこと | 暫定の置き場 | 追跡 Issue |
 | --- | --- | --- |
-| チーム単位の自由メモ (チーム規約 / 連絡網 / 来季の方針 等) | (なし) | 未起票。Hermes が見つけたら起票する |
-| メンバー単位の自由メモ (背番号 / ポジション / 連絡時間帯 / 助っ人かレギュラーか 等) | (なし) | 未起票 |
-| 既存 game の `note` を後から更新する API | (なし — 新規時のみ) | 未起票 |
+| ~~チーム単位の自由メモ (チーム規約 / 連絡網 / 来季の方針 等)~~ | **解消済** → `mound knowledge set --category RULE/NOTE` / `mound observe add` | — |
+| ~~メンバー単位の自由メモ (背番号 / ポジション / 連絡時間帯 / 助っ人かレギュラーか 等)~~ | **解消済** → `mound knowledge set --member <ID> --category ROSTER` | — |
+| 既存 game の `note` を後から更新する API | (なし — 新規時のみ。暫定で `mound observe add --kind NOTE` に逃がせる) | 未起票 |
 | 対戦相手チームの情報 (連絡先 / 過去戦績 / 信頼度) | (なし) | Phase 2 想定 |
-| 試合の精算 / 会計 | (なし) | Phase 1 範囲外 |
+| ~~試合の精算 / 会計~~ | **解消済** → `mound settle`(PayPay 割り勘: 割り勘計算・未払い把握・催促・自動 SETTLED)。PayPay 個人割り勘に公開 API は無いためリンクは人が貼り入金は人が消し込む | — |
 | 自然言語入力の直接受付 (`mound parse "土曜 9 時から練習試合"`) | (なし — Hermes の責務) | 未起票 |
 
 これらが必要になった場合、Hermes は次のいずれかをすべきです:

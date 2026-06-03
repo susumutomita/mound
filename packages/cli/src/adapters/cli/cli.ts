@@ -14,6 +14,7 @@ const USER_ERROR_NAMES = new Set([
   "GameNotFoundError",
   "MemberNotFoundError",
   "CrossTeamRsvpError",
+  "SettlementError",
 ]);
 
 function isUserError(e: unknown): boolean {
@@ -25,12 +26,17 @@ import type { NotificationSender } from "../../ports";
 import { TransitionDeniedError } from "../../usecases/errors";
 import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
+import { runAuto } from "./commands/auto";
 import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
+import { runKnowledge } from "./commands/knowledge";
+import { runLearn } from "./commands/learn";
 import { runMember } from "./commands/member";
 import { runNotify } from "./commands/notify";
+import { runObserve } from "./commands/observe";
 import { runRsvp } from "./commands/rsvp";
+import { runSettle } from "./commands/settle";
 import { runTeam } from "./commands/team";
 import { runWatch } from "./commands/watch";
 import { composeContext } from "./compose";
@@ -122,6 +128,21 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "watch":
         await runWatch(subArgs, ctx, renderOpts);
+        return 0;
+      case "observe":
+        await runObserve(subArgs, ctx, renderOpts);
+        return 0;
+      case "knowledge":
+        await runKnowledge(subArgs, ctx, renderOpts);
+        return 0;
+      case "learn":
+        await runLearn(subArgs, ctx, renderOpts);
+        return 0;
+      case "auto":
+        await runAuto(subArgs, ctx, renderOpts);
+        return 0;
+      case "settle":
+        await runSettle(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });
