@@ -248,6 +248,7 @@ function buildFake(): Fake {
       observations: buildObservationRepo().repo,
       knowledge: buildKnowledgeRepo().repo,
       settlements: buildSettlementRepo().repo,
+      backup: { exportAll: async () => [], importAll: async (r) => r.length },
     },
   };
 }

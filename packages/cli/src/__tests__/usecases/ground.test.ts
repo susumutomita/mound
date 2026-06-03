@@ -60,6 +60,7 @@ function buildCtx(opts: { now: Date; idSeed?: number }): {
     observations: stub,
     knowledge: stub,
     settlements: stub,
+    backup: stub,
   };
   const notifier = {
     send: async () => ({

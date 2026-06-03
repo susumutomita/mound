@@ -168,6 +168,19 @@ export interface NotificationSender {
   ): Promise<NotificationDeliveryResult>;
 }
 
+// 全テーブルのテキスト書き出し/取り込み (バックアップ / GitHub ミラー用)。
+// 1 行 = 1 レコード (JSONL にしやすい形)。Clean Architecture を保つため、
+// 生 SQL でのダンプ/復元は adapters/libsql の実装に閉じ込め、ここは境界だけ定義する。
+export interface BackupRow {
+  table: string;
+  data: Record<string, unknown>;
+}
+
+export interface BackupRepository {
+  exportAll(): Promise<BackupRow[]>;
+  importAll(rows: BackupRow[]): Promise<number>; // 取り込んだ行数
+}
+
 export interface Repositories {
   teams: TeamRepository;
   members: MemberRepository;
@@ -180,6 +193,7 @@ export interface Repositories {
   observations: ObservationRepository;
   knowledge: TeamKnowledgeRepository;
   settlements: SettlementRepository;
+  backup: BackupRepository;
 }
 
 export interface Clock {

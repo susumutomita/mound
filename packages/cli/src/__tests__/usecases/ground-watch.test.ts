@@ -60,6 +60,7 @@ function buildFake(): {
     observations: stub,
     knowledge: stub,
     settlements: stub,
+    backup: stub,
   };
   let seq = 0;
   const ctx: UseCaseContext = {

@@ -20,6 +20,8 @@ import type {
 } from "../../domain/types";
 import type {
   AuditRepository,
+  BackupRepository,
+  BackupRow,
   GameRepository,
   GroundSlotDiffFilter,
   GroundSlotFilter,
@@ -805,6 +807,60 @@ class LibsqlSettlementRepository implements SettlementRepository {
   }
 }
 
+// バックアップ対象テーブル。FK 順 (取り込み時に親→子の順で復元できる)。
+const BACKUP_TABLES = [
+  "teams",
+  "members",
+  "games",
+  "rsvps",
+  "ground_slots",
+  "notification_channels",
+  "ground_watches",
+  "observations",
+  "team_knowledge",
+  "settlements",
+  "settlement_shares",
+  "audit_logs",
+] as const;
+// 列名は schema 由来のみ許可 (取り込みファイル経由の SQL インジェクション防止)。
+const SAFE_COLUMN = /^[a-z_][a-z0-9_]*$/;
+
+class LibsqlBackupRepository implements BackupRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async exportAll(): Promise<BackupRow[]> {
+    const out: BackupRow[] = [];
+    for (const table of BACKUP_TABLES) {
+      const r = await this.db.execute(`SELECT * FROM ${table}`);
+      for (const row of r.rows) {
+        const data: Record<string, unknown> = {};
+        for (const col of r.columns) {
+          data[col] = (row as unknown as Record<string, unknown>)[col];
+        }
+        out.push({ table, data });
+      }
+    }
+    return out;
+  }
+
+  async importAll(rows: BackupRow[]): Promise<number> {
+    const allowed = new Set<string>(BACKUP_TABLES);
+    let n = 0;
+    for (const { table, data } of rows) {
+      if (!allowed.has(table)) continue;
+      const cols = Object.keys(data).filter((c) => SAFE_COLUMN.test(c));
+      if (cols.length === 0) continue;
+      const placeholders = cols.map(() => "?").join(", ");
+      await this.db.execute({
+        sql: `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
+        args: cols.map((c) => data[c] as InValue),
+      });
+      n++;
+    }
+    return n;
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -818,5 +874,6 @@ export function buildRepositories(db: DbClient): Repositories {
     observations: new LibsqlObservationRepository(db),
     knowledge: new LibsqlTeamKnowledgeRepository(db),
     settlements: new LibsqlSettlementRepository(db),
+    backup: new LibsqlBackupRepository(db),
   };
 }

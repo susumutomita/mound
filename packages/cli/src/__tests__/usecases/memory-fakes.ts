@@ -290,6 +290,10 @@ export function buildFakeContext(
     observations: observationRepo,
     knowledge: knowledgeRepo,
     settlements: buildSettlementRepo().repo,
+    backup: {
+      exportAll: async () => [],
+      importAll: async (rows) => rows.length,
+    },
   };
 
   const notifier: NotificationSender = {
