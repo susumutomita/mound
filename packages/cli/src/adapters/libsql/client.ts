@@ -63,8 +63,25 @@ export async function readSchemaVersion(db: DbClient): Promise<number> {
   }
 }
 
+// 既存テーブルへのカラム追加。CREATE TABLE IF NOT EXISTS では既存 DB に列が
+// 足されないため、ALTER を流す。重複 (既にある) はエラーになるので握りつぶす。
+async function addColumnIfMissing(
+  db: DbClient,
+  table: string,
+  column: string,
+  type: string,
+): Promise<void> {
+  try {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch {
+    // 既に存在する場合は何もしない
+  }
+}
+
 export async function migrate(db: DbClient): Promise<void> {
   await db.executeMultiple(SCHEMA_SQL);
+  // 既存 DB への追加カラム (新規 DB は CREATE 済みなので ALTER は no-op で握りつぶす)。
+  await addColumnIfMissing(db, "games", "ground_status", "TEXT");
   // PRAGMA user_version の "書き込み" は Turso (sqld) で許可されないため、
   // スキーマ版は schema_meta テーブルに記録する (local/remote 両対応)。
   await db.execute({

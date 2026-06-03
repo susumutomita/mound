@@ -1,9 +1,15 @@
 import { z } from "zod";
 import { assertGameStatus } from "../../../domain/guards";
-import { GAME_STATUSES, type GameStatus } from "../../../domain/types";
+import {
+  GAME_STATUSES,
+  GROUND_STATUSES,
+  type GameStatus,
+  WEEKDAY_CODES,
+} from "../../../domain/types";
 import type { UseCaseContext } from "../../../ports";
 import {
   createGame,
+  generateMonthlyGames,
   listGames,
   showGame,
   transitionGame,
@@ -26,8 +32,18 @@ const createInput = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "date は YYYY-MM-DD 形式")
     .optional(),
   ground: z.string().max(80).optional(),
+  groundStatus: z.enum(GROUND_STATUSES).optional(),
   minPlayers: z.coerce.number().int().min(1).max(30).default(9),
   note: z.string().max(500).optional(),
+});
+
+const generateInput = z.object({
+  teamId: z.string().min(1),
+  month: z.string().regex(/^\d{4}-\d{2}$/, "--month は YYYY-MM 形式"),
+  weekday: z.enum(WEEKDAY_CODES).optional(),
+  ground: z.string().max(80).optional(),
+  minPlayers: z.coerce.number().int().min(1).max(30).optional(),
+  title: z.string().min(1).max(120).optional(),
 });
 
 const statusFilterInput = z
@@ -42,6 +58,7 @@ const updateInput = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "date は YYYY-MM-DD 形式")
     .optional(),
   ground: z.string().max(80).optional(),
+  groundStatus: z.enum(GROUND_STATUSES).optional(),
   minPlayers: z.coerce.number().int().min(1).max(30).optional(),
   note: z.string().max(500).optional(),
 });
@@ -54,15 +71,54 @@ export async function runGame(
   const sub = args.positional[0];
   if (!sub) {
     throw new UsageError(
-      "使い方: mound game <create|list|show|update|transition>",
+      "使い方: mound game <create|list|show|update|generate|transition>",
     );
   }
   if (sub === "create") return create(args, ctx, opts);
   if (sub === "list") return list(args, ctx, opts);
   if (sub === "show") return show(args, ctx, opts);
   if (sub === "update") return update(args, ctx, opts);
+  if (sub === "generate") return generate(args, ctx, opts);
   if (sub === "transition") return transition(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: game ${sub}`);
+}
+
+async function generate(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const data = parseOrUsage(generateInput, {
+    teamId: requireFlag(args.flags, "team"),
+    month: requireFlag(args.flags, "month"),
+    weekday: optionalFlag(args.flags, "weekday"),
+    ground: optionalFlag(args.flags, "ground"),
+    minPlayers: optionalFlag(args.flags, "min-players"),
+    title: optionalFlag(args.flags, "title"),
+  });
+  const games = await generateMonthlyGames(ctx, {
+    teamId: data.teamId,
+    month: data.month,
+    weekday: data.weekday,
+    ground: data.ground,
+    minPlayers: data.minPlayers,
+    title: data.title,
+  });
+  emit(
+    games,
+    games.length === 0
+      ? "生成対象なし (既に試合がある / 該当曜日なし)"
+      : [
+          `${data.month} の候補試合を ${games.length} 件生成 (DRAFT / ground_status=WANTED)`,
+          formatRows(games, [
+            "id",
+            "game_date",
+            "ground_name",
+            "ground_status",
+          ]),
+        ].join("\n"),
+    opts,
+  );
 }
 
 async function update(
@@ -76,6 +132,7 @@ async function update(
     title: optionalFlag(args.flags, "title"),
     date: optionalFlag(args.flags, "date"),
     ground: optionalFlag(args.flags, "ground"),
+    groundStatus: optionalFlag(args.flags, "ground-status"),
     minPlayers: optionalFlag(args.flags, "min-players"),
     note: optionalFlag(args.flags, "note"),
   });
@@ -83,11 +140,12 @@ async function update(
     data.title === undefined &&
     data.date === undefined &&
     data.ground === undefined &&
+    data.groundStatus === undefined &&
     data.minPlayers === undefined &&
     data.note === undefined
   ) {
     throw new UsageError(
-      "--title / --date / --ground / --min-players / --note のいずれかを指定してください",
+      "--title / --date / --ground / --ground-status / --min-players / --note のいずれかを指定してください",
     );
   }
   const game = await updateGame(ctx, {
@@ -95,6 +153,7 @@ async function update(
     title: data.title,
     date: data.date,
     ground: data.ground,
+    groundStatus: data.groundStatus,
     minPlayers: data.minPlayers,
     note: data.note,
   });
@@ -111,6 +170,7 @@ async function create(
     title: requireFlag(args.flags, "title"),
     date: optionalFlag(args.flags, "date"),
     ground: optionalFlag(args.flags, "ground"),
+    groundStatus: optionalFlag(args.flags, "ground-status"),
     minPlayers: optionalFlag(args.flags, "min-players"),
     note: optionalFlag(args.flags, "note"),
   });
@@ -119,6 +179,7 @@ async function create(
     title: data.title,
     date: data.date ?? null,
     ground: data.ground ?? null,
+    groundStatus: data.groundStatus ?? null,
     minPlayers: data.minPlayers,
     note: data.note ?? null,
   });
@@ -138,7 +199,14 @@ async function list(
   });
   emit(
     games,
-    formatRows(games, ["id", "title", "status", "game_date", "ground_name"]),
+    formatRows(games, [
+      "id",
+      "title",
+      "status",
+      "game_date",
+      "ground_name",
+      "ground_status",
+    ]),
     opts,
   );
 }
@@ -173,7 +241,7 @@ async function show(
     `id: ${game.id}`,
     `team: ${game.team_id}`,
     `date: ${game.game_date ?? "(未定)"}`,
-    `ground: ${game.ground_name ?? "(未定)"}`,
+    `ground: ${game.ground_name ?? "(未定)"}${game.ground_status ? ` [${game.ground_status}]` : ""}`,
     `min_players: ${game.min_players}`,
     `note: ${game.note ?? ""}`,
     `RSVP: available=${s.available} unavailable=${s.unavailable} maybe=${s.maybe} no_response=${s.no_response}`,

@@ -31,6 +31,7 @@ async function addGame(
     status,
     game_date: "2026-06-01",
     ground_name: "三ツ沢",
+    ground_status: null,
     min_players: 1,
     note: null,
     created_at: "x",

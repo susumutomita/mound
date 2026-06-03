@@ -19,6 +19,16 @@ export type RsvpResponse = (typeof RSVP_RESPONSES)[number];
 export const MEMBER_ROLES = ["ADMIN", "MEMBER"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+// 会場の確保状況 (月次の抽選予約ルーティン用)。
+// WANTED=希望/未着手, APPLIED=抽選申込済, SECURED=確保, LOST=落選(→キャンセル監視へ)。
+export const GROUND_STATUSES = [
+  "WANTED",
+  "APPLIED",
+  "SECURED",
+  "LOST",
+] as const;
+export type GroundStatus = (typeof GROUND_STATUSES)[number];
+
 export const NOTIFICATION_KINDS = ["DISCORD", "SLACK", "LINE"] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -47,6 +57,7 @@ export interface Game {
   status: GameStatus;
   game_date: string | null;
   ground_name: string | null;
+  ground_status: GroundStatus | null;
   min_players: number;
   note: string | null;
   created_at: string;

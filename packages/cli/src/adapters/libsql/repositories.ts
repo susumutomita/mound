@@ -170,9 +170,9 @@ class LibsqlGameRepository implements GameRepository {
   async insert(game: Game): Promise<Game> {
     await this.db.execute({
       sql: `INSERT INTO games (
-              id, team_id, title, status, game_date, ground_name,
+              id, team_id, title, status, game_date, ground_name, ground_status,
               min_players, note, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         game.id,
         game.team_id,
@@ -180,6 +180,7 @@ class LibsqlGameRepository implements GameRepository {
         game.status,
         game.game_date,
         game.ground_name,
+        game.ground_status,
         game.min_players,
         game.note,
         game.created_at,
@@ -232,11 +233,13 @@ class LibsqlGameRepository implements GameRepository {
   async update(game: Game): Promise<Game> {
     await this.db.execute({
       sql: `UPDATE games SET title = ?, game_date = ?, ground_name = ?,
-              min_players = ?, note = ?, updated_at = ? WHERE id = ?`,
+              ground_status = ?, min_players = ?, note = ?, updated_at = ?
+            WHERE id = ?`,
       args: [
         game.title,
         game.game_date,
         game.ground_name,
+        game.ground_status,
         game.min_players,
         game.note,
         game.updated_at,
