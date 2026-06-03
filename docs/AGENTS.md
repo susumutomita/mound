@@ -247,6 +247,10 @@ Hermes は以下を **必ず守ること**:
 | `learn` | `--team [--apply]` | `LearnResult` (履歴から決め事を学習) |
 | `auto plan` | `--team [--horizon-days]` | `AutoPlan` (打つべき手, read-only) |
 | `auto run` | `--team [--apply --horizon-days]` | `AutoRunResult` (SAFE は自動・要承認は提案) |
+| `settle open` | `--game --amount [--link --label --note --members]` | `SettlementView` (PayPay 割り勘を作成) |
+| `settle show` | `--game` | `SettlementView \| {found:false}` |
+| `settle pay` | `--game --member [--unpaid]` | `SettlementView` (全額で自動 SETTLED) |
+| `settle remind` | `--game` | `{message, deliveries}` (PayPay 催促を通知) |
 
 サブコマンドの詳細は `mound <command> [sub] --help` で取れます (実装は `packages/cli/src/adapters/cli/help.ts`)。
 
@@ -543,7 +547,7 @@ mound に永続化したいのに「書く場所が無い」情報は、Hermes �
 | ~~メンバー単位の自由メモ (背番号 / ポジション / 連絡時間帯 / 助っ人かレギュラーか 等)~~ | **解消済** → `mound knowledge set --member <ID> --category ROSTER` | — |
 | 既存 game の `note` を後から更新する API | (なし — 新規時のみ。暫定で `mound observe add --kind NOTE` に逃がせる) | 未起票 |
 | 対戦相手チームの情報 (連絡先 / 過去戦績 / 信頼度) | (なし) | Phase 2 想定 |
-| 試合の精算 / 会計 | (なし) | Phase 1 範囲外 |
+| ~~試合の精算 / 会計~~ | **解消済** → `mound settle`(PayPay 割り勘: 割り勘計算・未払い把握・催促・自動 SETTLED)。PayPay 個人割り勘に公開 API は無いためリンクは人が貼り入金は人が消し込む | — |
 | 自然言語入力の直接受付 (`mound parse "土曜 9 時から練習試合"`) | (なし — Hermes の責務) | 未起票 |
 
 これらが必要になった場合、Hermes は次のいずれかをすべきです:

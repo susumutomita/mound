@@ -13,6 +13,8 @@ import {
   type ObservationKind,
   RSVP_RESPONSES,
   type RsvpResponse,
+  SETTLEMENT_STATUSES,
+  type SettlementStatus,
 } from "./types";
 
 export function isGameStatus(value: unknown): value is GameStatus {
@@ -120,6 +122,20 @@ export function isKnowledgeOrigin(value: unknown): value is KnowledgeOrigin {
 export function assertKnowledgeOrigin(value: unknown): KnowledgeOrigin {
   if (!isKnowledgeOrigin(value)) {
     throw new DomainInvariantError(`不正な KnowledgeOrigin: ${String(value)}`);
+  }
+  return value;
+}
+
+export function isSettlementStatus(value: unknown): value is SettlementStatus {
+  return (
+    typeof value === "string" &&
+    (SETTLEMENT_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function assertSettlementStatus(value: unknown): SettlementStatus {
+  if (!isSettlementStatus(value)) {
+    throw new DomainInvariantError(`不正な SettlementStatus: ${String(value)}`);
   }
   return value;
 }

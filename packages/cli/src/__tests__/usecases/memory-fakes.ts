@@ -15,6 +15,8 @@ import type {
   Observation,
   Rsvp,
   RsvpBreakdown,
+  Settlement,
+  SettlementShare,
   Team,
   TeamKnowledge,
 } from "../../domain/types";
@@ -22,6 +24,7 @@ import type {
   NotificationSender,
   ObservationRepository,
   Repositories,
+  SettlementRepository,
   TeamKnowledgeRepository,
   UseCaseContext,
 } from "../../ports";
@@ -75,6 +78,53 @@ export function buildKnowledgeRepo(
     remove: async (id) => store.delete(id),
   };
   return { store, repo };
+}
+
+export function buildSettlementRepo(
+  settlements: Map<string, Settlement> = new Map(),
+  shares: Map<string, SettlementShare> = new Map(),
+): {
+  settlements: Map<string, Settlement>;
+  shares: Map<string, SettlementShare>;
+  repo: SettlementRepository;
+} {
+  const repo: SettlementRepository = {
+    insert: async (s) => {
+      settlements.set(s.id, s);
+      return s;
+    },
+    getByGame: async (gameId) =>
+      Array.from(settlements.values()).find((s) => s.game_id === gameId) ??
+      null,
+    updateStatus: async (id, status, updatedAt) => {
+      const s = settlements.get(id);
+      if (s) settlements.set(id, { ...s, status, updated_at: updatedAt });
+    },
+    insertShare: async (sh) => {
+      shares.set(sh.id, sh);
+      return sh;
+    },
+    listShares: async (settlementId) =>
+      Array.from(shares.values()).filter(
+        (sh) => sh.settlement_id === settlementId,
+      ),
+    getShare: async (settlementId, memberId) =>
+      Array.from(shares.values()).find(
+        (sh) => sh.settlement_id === settlementId && sh.member_id === memberId,
+      ) ?? null,
+    updateSharePaid: async (id, paid, paidAt, updatedAt) => {
+      const sh = shares.get(id);
+      if (sh) {
+        shares.set(id, {
+          ...sh,
+          paid,
+          paid_at: paidAt,
+          updated_at: updatedAt,
+        });
+      }
+    },
+  };
+  return { settlements, shares, repo };
 }
 
 export interface FakeStores {
@@ -230,6 +280,7 @@ export function buildFakeContext(
     },
     observations: observationRepo,
     knowledge: knowledgeRepo,
+    settlements: buildSettlementRepo().repo,
   };
 
   const notifier: NotificationSender = {

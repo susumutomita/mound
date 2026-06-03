@@ -115,6 +115,37 @@ export interface NotificationChannel {
   updated_at: string;
 }
 
+// === 精算 (PayPay 割り勘) ===
+// 試合 1 件につき精算 1 件。参加者で会場費等を割り勘し、PayPay リンクを貼って
+// 催促・消し込みする。全員払ったら status=SETTLED になり、game も SETTLED へ進む。
+// (PayPay 個人割り勘に公開 API は無いため、リンクは人が貼り入金は人が消し込む)
+export const SETTLEMENT_STATUSES = ["OPEN", "SETTLED"] as const;
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
+export interface Settlement {
+  id: string;
+  game_id: string;
+  team_id: string;
+  total_amount: number; // 合計 (円)
+  payment_link: string | null; // PayPay 割り勘 / 受け取りリンク
+  payment_label: string | null; // 例: "PayPay: 田中宛"
+  note: string | null;
+  status: SettlementStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SettlementShare {
+  id: string;
+  settlement_id: string;
+  member_id: string;
+  amount: number; // この人の負担 (円)。割り勘の端数も含め合計は total に一致
+  paid: boolean;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // 曜日コード (ISO weekday の小文字 3 文字)。watch.weekdays は CSV で持つ。
 export const WEEKDAY_CODES = [
   "sun",

@@ -55,6 +55,7 @@ function buildFake(): {
     groundWatches: watchRepo,
     observations: stub,
     knowledge: stub,
+    settlements: stub,
   };
   let seq = 0;
   const ctx: UseCaseContext = {

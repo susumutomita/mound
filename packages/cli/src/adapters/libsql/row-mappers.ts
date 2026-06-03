@@ -7,6 +7,7 @@ import {
   assertNotificationKind,
   assertObservationKind,
   assertRsvpResponse,
+  assertSettlementStatus,
 } from "../../domain/guards";
 import type {
   AuditLog,
@@ -18,6 +19,8 @@ import type {
   NotificationChannel,
   Observation,
   Rsvp,
+  Settlement,
+  SettlementShare,
   Team,
   TeamKnowledge,
 } from "../../domain/types";
@@ -156,6 +159,34 @@ export function rowToTeamKnowledge(row: Row): TeamKnowledge {
     evidence_count: Number(row.evidence_count),
     source: nullable(row.source),
     last_observed_at: nullable(row.last_observed_at),
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToSettlement(row: Row): Settlement {
+  return {
+    id: str(row.id),
+    game_id: str(row.game_id),
+    team_id: str(row.team_id),
+    total_amount: Number(row.total_amount),
+    payment_link: nullable(row.payment_link),
+    payment_label: nullable(row.payment_label),
+    note: nullable(row.note),
+    status: assertSettlementStatus(str(row.status)),
+    created_at: str(row.created_at),
+    updated_at: str(row.updated_at),
+  };
+}
+
+export function rowToSettlementShare(row: Row): SettlementShare {
+  return {
+    id: str(row.id),
+    settlement_id: str(row.settlement_id),
+    member_id: str(row.member_id),
+    amount: Number(row.amount),
+    paid: Number(row.paid) !== 0,
+    paid_at: nullable(row.paid_at),
     created_at: str(row.created_at),
     updated_at: str(row.updated_at),
   };

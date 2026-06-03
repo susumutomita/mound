@@ -35,6 +35,14 @@ export class CrossTeamRsvpError extends Error {
   }
 }
 
+// 精算ドメインの拒否 (参加者ゼロ / 精算未作成 / 二重作成 等)。CLI では exit 2。
+export class SettlementError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SettlementError";
+  }
+}
+
 export interface TransitionDeniedDetails {
   from: GameStatus;
   to: GameStatus;

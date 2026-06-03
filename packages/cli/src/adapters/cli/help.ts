@@ -40,6 +40,10 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   learn --team <ID> [--apply]                過去の試合・出欠から決め事を学習
   auto plan --team <ID> [--horizon-days N]    いま打つべき手を算出 (read-only)
   auto run --team <ID> [--apply] [--horizon-days N]  安全な手は自動・拘束する手は提案
+  settle open --game <ID> --amount <YEN> [--link URL] [--label L] [--note N] [--members CSV]
+  settle show --game <ID>
+  settle pay --game <ID> --member <ID> [--unpaid]
+  settle remind --game <ID>                   PayPay 割り勘の催促を通知
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -665,6 +669,37 @@ JSON 出力:
     "facts": [{ category, key, value, confidence, evidence_count, member_id, member_name, rationale }],
     "pinned_skips": string[]
   }
+`,
+
+  settle: `mound settle — 精算 (PayPay 割り勘): 割り勘計算・未払い把握・催促・自動完了
+
+サブコマンド:
+  settle open   --game <ID> --amount <YEN> [--link URL] [--label L] [--note N] [--members CSV] [--json]
+  settle show   --game <ID> [--json]
+  settle pay    --game <ID> --member <ID> [--unpaid] [--json]
+  settle remind --game <ID> [--json]
+
+挙動:
+  - open: 合計金額を参加者 (既定: RSVP=AVAILABLE のメンバー / --members で明示) で割り勘し、
+          端数は先頭から 1 円ずつ調整して合計を一致させる。試合 1 件につき 1 精算。
+  - pay:  支払いを消し込む。全員払うと settlement=SETTLED になり、COMPLETED の試合は
+          自動で SETTLED へ進む (--unpaid で取り消し)。
+  - remind: PayPay リンク + 1人あたり + 未払い者を催促文にしてチームの通知チャネルへ送信。
+
+備考:
+  PayPay 個人割り勘に公開 API は無いため、リンクは人が貼り、入金は人が消し込む。
+  mound は割り勘額の計算・未払いの把握・催促文の生成・精算完了の自動遷移を担う。
+
+JSON 出力 (open/show/pay):
+  {
+    "settlement": { id, game_id, team_id, total_amount, payment_link, payment_label, note, status, ... },
+    "shares": [{ member_id, member_name, amount, paid, paid_at, ... }],
+    "summary": { participants, paid_count, unpaid_count, collected, outstanding, total }
+  }
+
+エラー:
+  - GameNotFoundError (exit 2)
+  - SettlementError: 参加者ゼロ / 精算二重作成 / 精算未作成 / 金額不正 (exit 2)
 `,
 
   auto: `mound auto — autopilot: いま打つべき手を算出し、安全な手は自動・拘束する手は提案

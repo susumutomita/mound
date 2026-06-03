@@ -12,6 +12,9 @@ import type {
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
+  Settlement,
+  SettlementShare,
+  SettlementStatus,
   Team,
   TeamKnowledge,
 } from "../../domain/types";
@@ -29,6 +32,7 @@ import type {
   ObservationRepository,
   Repositories,
   RsvpRepository,
+  SettlementRepository,
   TeamKnowledgeRepository,
   TeamRepository,
 } from "../../ports";
@@ -43,6 +47,8 @@ import {
   rowToNotificationChannel,
   rowToObservation,
   rowToRsvp,
+  rowToSettlement,
+  rowToSettlementShare,
   rowToTeam,
   rowToTeamKnowledge,
 } from "./row-mappers";
@@ -672,6 +678,103 @@ class LibsqlTeamKnowledgeRepository implements TeamKnowledgeRepository {
   }
 }
 
+class LibsqlSettlementRepository implements SettlementRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(settlement: Settlement): Promise<Settlement> {
+    await this.db.execute({
+      sql: `INSERT INTO settlements (
+              id, game_id, team_id, total_amount, payment_link, payment_label,
+              note, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        settlement.id,
+        settlement.game_id,
+        settlement.team_id,
+        settlement.total_amount,
+        settlement.payment_link,
+        settlement.payment_label,
+        settlement.note,
+        settlement.status,
+        settlement.created_at,
+        settlement.updated_at,
+      ],
+    });
+    return settlement;
+  }
+
+  async getByGame(gameId: string): Promise<Settlement | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM settlements WHERE game_id = ?",
+      args: [gameId],
+    });
+    return r.rows[0] ? rowToSettlement(r.rows[0]) : null;
+  }
+
+  async updateStatus(
+    id: string,
+    status: SettlementStatus,
+    updatedAt: string,
+  ): Promise<void> {
+    await this.db.execute({
+      sql: "UPDATE settlements SET status = ?, updated_at = ? WHERE id = ?",
+      args: [status, updatedAt, id],
+    });
+  }
+
+  async insertShare(share: SettlementShare): Promise<SettlementShare> {
+    await this.db.execute({
+      sql: `INSERT INTO settlement_shares (
+              id, settlement_id, member_id, amount, paid, paid_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        share.id,
+        share.settlement_id,
+        share.member_id,
+        share.amount,
+        share.paid ? 1 : 0,
+        share.paid_at,
+        share.created_at,
+        share.updated_at,
+      ],
+    });
+    return share;
+  }
+
+  async listShares(settlementId: string): Promise<SettlementShare[]> {
+    const r = await this.db.execute({
+      sql: `SELECT * FROM settlement_shares WHERE settlement_id = ?
+            ORDER BY created_at ASC`,
+      args: [settlementId],
+    });
+    return r.rows.map(rowToSettlementShare);
+  }
+
+  async getShare(
+    settlementId: string,
+    memberId: string,
+  ): Promise<SettlementShare | null> {
+    const r = await this.db.execute({
+      sql: "SELECT * FROM settlement_shares WHERE settlement_id = ? AND member_id = ?",
+      args: [settlementId, memberId],
+    });
+    return r.rows[0] ? rowToSettlementShare(r.rows[0]) : null;
+  }
+
+  async updateSharePaid(
+    id: string,
+    paid: boolean,
+    paidAt: string | null,
+    updatedAt: string,
+  ): Promise<void> {
+    await this.db.execute({
+      sql: "UPDATE settlement_shares SET paid = ?, paid_at = ?, updated_at = ? WHERE id = ?",
+      args: [paid ? 1 : 0, paidAt, updatedAt, id],
+    });
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -684,5 +787,6 @@ export function buildRepositories(db: DbClient): Repositories {
     groundWatches: new LibsqlGroundWatchRepository(db),
     observations: new LibsqlObservationRepository(db),
     knowledge: new LibsqlTeamKnowledgeRepository(db),
+    settlements: new LibsqlSettlementRepository(db),
   };
 }

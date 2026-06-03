@@ -10,6 +10,7 @@ import { computeAgenda } from "./agenda";
 import { TeamNotFoundError } from "./errors";
 import { transitionGame } from "./game";
 import { notifyTeam } from "./notification";
+import { formatSettlementMessage, getSettlement } from "./settlement";
 
 export type AutoActionKind =
   | "PUBLISH" // DRAFT → COLLECTING (出欠回収を開始)
@@ -116,14 +117,21 @@ export async function planAutopilot(
   }
 
   for (const game of agenda.needs_settlement) {
+    // 精算が作成済みなら PayPay リンク + 未払い者入りの催促を、未作成なら作成を促す。
+    const view = await getSettlement(ctx, game.id);
+    const message = view
+      ? formatSettlementMessage(game.title, view)
+      : `💰 「${game.title}」の精算がまだです。mound settle open で PayPay 割り勘を作成してください。`;
     actions.push({
       kind: "REMIND_SETTLEMENT",
       risk: "SAFE",
       game_id: game.id,
       game_title: game.title,
-      reason: "完了済だが精算が未了",
+      reason: view
+        ? `未払い ${view.summary.unpaid_count}人 / 未回収 ¥${view.summary.outstanding}`
+        : "完了済だが精算が未作成",
       transition_to: null,
-      message: `💰 「${game.title}」の精算がまだ済んでいません。集金・精算をお願いします。`,
+      message,
     });
   }
 

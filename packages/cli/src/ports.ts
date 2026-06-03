@@ -15,6 +15,9 @@ import type {
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
+  Settlement,
+  SettlementShare,
+  SettlementStatus,
   Team,
   TeamKnowledge,
 } from "./domain/types";
@@ -114,6 +117,29 @@ export interface TeamKnowledgeRepository {
   remove(id: string): Promise<boolean>;
 }
 
+// 精算 (PayPay 割り勘)。試合 1 件につき settlement 1 件 + 参加者ごとの share。
+export interface SettlementRepository {
+  insert(settlement: Settlement): Promise<Settlement>;
+  getByGame(gameId: string): Promise<Settlement | null>;
+  updateStatus(
+    id: string,
+    status: SettlementStatus,
+    updatedAt: string,
+  ): Promise<void>;
+  insertShare(share: SettlementShare): Promise<SettlementShare>;
+  listShares(settlementId: string): Promise<SettlementShare[]>;
+  getShare(
+    settlementId: string,
+    memberId: string,
+  ): Promise<SettlementShare | null>;
+  updateSharePaid(
+    id: string,
+    paid: boolean,
+    paidAt: string | null,
+    updatedAt: string,
+  ): Promise<void>;
+}
+
 export interface NotificationChannelRepository {
   insert(channel: NotificationChannel): Promise<NotificationChannel>;
   list(teamId: string): Promise<NotificationChannel[]>;
@@ -150,6 +176,7 @@ export interface Repositories {
   groundWatches: GroundWatchRepository;
   observations: ObservationRepository;
   knowledge: TeamKnowledgeRepository;
+  settlements: SettlementRepository;
 }
 
 export interface Clock {

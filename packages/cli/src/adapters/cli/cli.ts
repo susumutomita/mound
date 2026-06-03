@@ -14,6 +14,7 @@ const USER_ERROR_NAMES = new Set([
   "GameNotFoundError",
   "MemberNotFoundError",
   "CrossTeamRsvpError",
+  "SettlementError",
 ]);
 
 function isUserError(e: unknown): boolean {
@@ -35,6 +36,7 @@ import { runMember } from "./commands/member";
 import { runNotify } from "./commands/notify";
 import { runObserve } from "./commands/observe";
 import { runRsvp } from "./commands/rsvp";
+import { runSettle } from "./commands/settle";
 import { runTeam } from "./commands/team";
 import { runWatch } from "./commands/watch";
 import { composeContext } from "./compose";
@@ -138,6 +140,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "auto":
         await runAuto(subArgs, ctx, renderOpts);
+        return 0;
+      case "settle":
+        await runSettle(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });
