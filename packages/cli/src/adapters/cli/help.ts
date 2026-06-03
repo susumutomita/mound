@@ -5,6 +5,8 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
 
 コマンド:
   init                                       DB を初期化する
+  config set [--db-url URL] [--db-token TOKEN]  接続先を ~/.mound/config.json に保存
+  config show                                現在の接続設定 (トークンはマスク)
   team create --name <N> [--area <A>]        チームを作成
   team list                                  チーム一覧
   team update --team <ID> [--name <N>] [--area <A>]   名前/本拠地を編集
@@ -61,6 +63,9 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   --help       このヘルプ
   --version    バージョン
 
+接続先の決定順:
+  環境変数 > ~/.mound/config.json (mound config set) > 既定 (~/.mound/mound.db)
+
 環境変数:
   MOUND_DB_URL          libSQL URL (例: file:./mound.db, libsql://...turso.io)
   MOUND_DB_AUTH_TOKEN   Turso 認証トークン
@@ -82,6 +87,29 @@ export const COMMAND_HELP: Record<string, string> = {
 
 JSON 出力:
   { "ok": true }
+`,
+
+  config: `mound config — 接続先 (DB URL / 認証トークン) を保存する
+
+サブコマンド:
+  config set  [--db-url <URL>] [--db-token <TOKEN>] [--json]
+  config show [--json]
+  config path [--json]
+
+説明:
+  ~/.zshrc に環境変数を書く代わりに、~/.mound/config.json に接続先を保存する。
+  ファイルは owner-only (0600)。トークンは表示時に末尾4文字だけ見せる (マスク)。
+  接続先の決定順は 環境変数 > config.json > 既定 (~/.mound/mound.db)。
+  この設定は DB を開く前に読むので、誤った URL でも config set で直せる。
+
+例 (Turso に向ける):
+  mound config set \\
+    --db-url libsql://xeros-<org>.turso.io \\
+    --db-token <TURSO_TOKEN>
+  mound init        # 以降は env 不要で Turso を使う
+
+JSON 出力 (set/show):
+  { "path": string, "db_url": string|null, "db_auth_token": "****xxxx"|null }
 `,
 
   team: `mound team — チーム管理
