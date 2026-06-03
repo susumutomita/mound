@@ -4,7 +4,13 @@ import {
   ensureSchemaUpToDate,
   openDb,
 } from "../libsql/client";
-import { type ParsedArgs, UsageError, boolFlag, parseArgs } from "./args";
+import {
+  type ParsedArgs,
+  UsageError,
+  boolFlag,
+  optionalFlag,
+  parseArgs,
+} from "./args";
 
 const USER_ERROR_NAMES = new Set([
   "UsageError",
@@ -46,6 +52,8 @@ import { runWatch } from "./commands/watch";
 import { composeContext } from "./compose";
 import { HELP, VERSION, findCommandHelp } from "./help";
 import {
+  OUTPUT_FORMATS,
+  type OutputFormat,
   type OutputSink,
   emit,
   emitError,
@@ -68,8 +76,23 @@ export async function run(options: RunOptions): Promise<number> {
   const stdout = options.stdout ?? stdoutSink;
   const stderr = options.stderr ?? stderrSink;
   const parsed = parseArgs(options.argv);
-  const json = boolFlag(parsed.flags, "json");
-  const renderOpts = { json, sink: stdout };
+  // AWS CLI 風の --output text|json|tsv|csv。--json は --output json の別名。
+  const outFlag = optionalFlag(parsed.flags, "output");
+  if (
+    outFlag !== undefined &&
+    !(OUTPUT_FORMATS as readonly string[]).includes(outFlag)
+  ) {
+    emitError(`--output は ${OUTPUT_FORMATS.join(" | ")} のいずれかです`, {
+      json: false,
+      sink: stderr,
+    });
+    return 2;
+  }
+  const format: OutputFormat =
+    (outFlag as OutputFormat | undefined) ??
+    (boolFlag(parsed.flags, "json") ? "json" : "text");
+  const json = format === "json";
+  const renderOpts = { format, json, sink: stdout };
 
   if (boolFlag(parsed.flags, "version")) {
     emit({ version: VERSION }, `mound ${VERSION}`, renderOpts);
