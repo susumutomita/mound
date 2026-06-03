@@ -42,14 +42,35 @@ export function openDb(config: DbConfig): DbClient {
 }
 
 export async function readSchemaVersion(db: DbClient): Promise<number> {
-  const r = await db.execute("PRAGMA user_version");
-  const v = r.rows[0]?.user_version;
-  return typeof v === "number" ? v : Number(v ?? 0);
+  // 新方式: schema_meta テーブル (local/remote 両対応)。
+  try {
+    const r = await db.execute(
+      "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+    );
+    const v = r.rows[0]?.value;
+    if (v !== undefined && v !== null) return Number(v);
+  } catch {
+    // schema_meta がまだ無い (初回 / 旧 DB)。下の PRAGMA フォールバックへ。
+  }
+  // 旧方式フォールバック: 既存ローカル DB は PRAGMA user_version を持つ。
+  // remote では PRAGMA 読み取りが弾かれることがあるので try で握りつぶす。
+  try {
+    const r = await db.execute("PRAGMA user_version");
+    const v = r.rows[0]?.user_version;
+    return typeof v === "number" ? v : Number(v ?? 0);
+  } catch {
+    return 0;
+  }
 }
 
 export async function migrate(db: DbClient): Promise<void> {
   await db.executeMultiple(SCHEMA_SQL);
-  await db.execute(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  // PRAGMA user_version の "書き込み" は Turso (sqld) で許可されないため、
+  // スキーマ版は schema_meta テーブルに記録する (local/remote 両対応)。
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
+    args: [String(SCHEMA_VERSION)],
+  });
 }
 
 export async function ensureSchemaUpToDate(db: DbClient): Promise<void> {

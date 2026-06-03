@@ -1,6 +1,13 @@
 export const SCHEMA_VERSION = 6;
 
 export const SCHEMA_SQL = `
+-- スキーマ版を記録するメタテーブル。PRAGMA user_version の書き込みは Turso (sqld)
+-- で許可されないため、バージョンはここに普通の SQL で記録する (local/remote 両対応)。
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS teams (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
