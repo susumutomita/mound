@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS teams (
@@ -114,4 +114,38 @@ CREATE TABLE IF NOT EXISTS ground_watches (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ground_watches_team ON ground_watches(team_id);
+
+-- 🥉 Bronze: チームの記憶。エージェントが会話で得た「生の観測」。追記専用・不変。
+CREATE TABLE IF NOT EXISTS observations (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  member_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL,
+  subject TEXT,
+  body TEXT NOT NULL,
+  source TEXT,
+  observed_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_observations_team ON observations(team_id);
+
+-- 🥇 Gold: 確信度付きの「チームの決め事」。(team_id, member_id, key) で一意。
+-- origin=HUMAN は LEARNED に上書きされない。evidence_count は裏付けの累積回数。
+CREATE TABLE IF NOT EXISTS team_knowledge (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  member_id TEXT REFERENCES members(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  origin TEXT NOT NULL CHECK (origin IN ('HUMAN', 'LEARNED')),
+  confidence REAL NOT NULL,
+  evidence_count INTEGER NOT NULL DEFAULT 1,
+  source TEXT,
+  last_observed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(team_id, member_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_team_knowledge_team ON team_knowledge(team_id);
 `;

@@ -8,10 +8,12 @@ import type {
   Member,
   MemberRsvp,
   NotificationChannel,
+  Observation,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
   Team,
+  TeamKnowledge,
 } from "../../domain/types";
 import type {
   AuditRepository,
@@ -20,10 +22,14 @@ import type {
   GroundSlotFilter,
   GroundSlotRepository,
   GroundWatchRepository,
+  KnowledgeFilter,
   MemberRepository,
   NotificationChannelRepository,
+  ObservationFilter,
+  ObservationRepository,
   Repositories,
   RsvpRepository,
+  TeamKnowledgeRepository,
   TeamRepository,
 } from "../../ports";
 import type { DbClient } from "./client";
@@ -35,8 +41,10 @@ import {
   rowToMember,
   rowToMemberRsvp,
   rowToNotificationChannel,
+  rowToObservation,
   rowToRsvp,
   rowToTeam,
+  rowToTeamKnowledge,
 } from "./row-mappers";
 
 class LibsqlTeamRepository implements TeamRepository {
@@ -520,6 +528,150 @@ class LibsqlGroundWatchRepository implements GroundWatchRepository {
   }
 }
 
+class LibsqlObservationRepository implements ObservationRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(observation: Observation): Promise<Observation> {
+    await this.db.execute({
+      sql: `INSERT INTO observations (
+              id, team_id, member_id, kind, subject, body, source,
+              observed_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        observation.id,
+        observation.team_id,
+        observation.member_id,
+        observation.kind,
+        observation.subject,
+        observation.body,
+        observation.source,
+        observation.observed_at,
+        observation.created_at,
+      ],
+    });
+    return observation;
+  }
+
+  async list(filter: ObservationFilter): Promise<Observation[]> {
+    const where: string[] = ["team_id = ?"];
+    const args: InValue[] = [filter.teamId];
+    if (filter.kind) {
+      where.push("kind = ?");
+      args.push(filter.kind);
+    }
+    if (filter.memberId) {
+      where.push("member_id = ?");
+      args.push(filter.memberId);
+    }
+    const r = await this.db.execute({
+      sql: `SELECT * FROM observations WHERE ${where.join(" AND ")}
+            ORDER BY observed_at DESC`,
+      args,
+    });
+    return r.rows.map(rowToObservation);
+  }
+}
+
+class LibsqlTeamKnowledgeRepository implements TeamKnowledgeRepository {
+  constructor(private readonly db: DbClient) {}
+
+  async insert(entry: TeamKnowledge): Promise<TeamKnowledge> {
+    await this.db.execute({
+      sql: `INSERT INTO team_knowledge (
+              id, team_id, member_id, category, key, value, origin,
+              confidence, evidence_count, source, last_observed_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        entry.id,
+        entry.team_id,
+        entry.member_id,
+        entry.category,
+        entry.key,
+        entry.value,
+        entry.origin,
+        entry.confidence,
+        entry.evidence_count,
+        entry.source,
+        entry.last_observed_at,
+        entry.created_at,
+        entry.updated_at,
+      ],
+    });
+    return entry;
+  }
+
+  async update(entry: TeamKnowledge): Promise<TeamKnowledge> {
+    await this.db.execute({
+      sql: `UPDATE team_knowledge SET
+              category = ?, value = ?, origin = ?, confidence = ?,
+              evidence_count = ?, source = ?, last_observed_at = ?, updated_at = ?
+            WHERE id = ?`,
+      args: [
+        entry.category,
+        entry.value,
+        entry.origin,
+        entry.confidence,
+        entry.evidence_count,
+        entry.source,
+        entry.last_observed_at,
+        entry.updated_at,
+        entry.id,
+      ],
+    });
+    return entry;
+  }
+
+  async getByKey(
+    teamId: string,
+    memberId: string | null,
+    key: string,
+  ): Promise<TeamKnowledge | null> {
+    // member_id は NULL を含むため = ではなく IS NULL で分岐する。
+    const memberClause =
+      memberId === null ? "member_id IS NULL" : "member_id = ?";
+    const args: InValue[] =
+      memberId === null ? [teamId, key] : [teamId, memberId, key];
+    const r = await this.db.execute({
+      sql: `SELECT * FROM team_knowledge
+            WHERE team_id = ? AND ${memberClause} AND key = ?`,
+      args,
+    });
+    return r.rows[0] ? rowToTeamKnowledge(r.rows[0]) : null;
+  }
+
+  async list(filter: KnowledgeFilter): Promise<TeamKnowledge[]> {
+    const where: string[] = ["team_id = ?"];
+    const args: InValue[] = [filter.teamId];
+    if (filter.category) {
+      where.push("category = ?");
+      args.push(filter.category);
+    }
+    if (filter.memberId) {
+      where.push("member_id = ?");
+      args.push(filter.memberId);
+    }
+    if (filter.key) {
+      where.push("key = ?");
+      args.push(filter.key);
+    }
+    const r = await this.db.execute({
+      sql: `SELECT * FROM team_knowledge WHERE ${where.join(" AND ")}
+            ORDER BY category ASC, key ASC, created_at ASC`,
+      args,
+    });
+    return r.rows.map(rowToTeamKnowledge);
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM team_knowledge WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
+  }
+}
+
 export function buildRepositories(db: DbClient): Repositories {
   return {
     teams: new LibsqlTeamRepository(db),
@@ -530,5 +682,7 @@ export function buildRepositories(db: DbClient): Repositories {
     groundSlots: new LibsqlGroundSlotRepository(db),
     notifications: new LibsqlNotificationChannelRepository(db),
     groundWatches: new LibsqlGroundWatchRepository(db),
+    observations: new LibsqlObservationRepository(db),
+    knowledge: new LibsqlTeamKnowledgeRepository(db),
   };
 }

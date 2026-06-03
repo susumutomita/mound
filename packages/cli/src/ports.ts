@@ -6,13 +6,17 @@ import type {
   GameStatus,
   GroundSlot,
   GroundWatch,
+  KnowledgeCategory,
   Member,
   MemberRsvp,
   NotificationChannel,
+  Observation,
+  ObservationKind,
   Rsvp,
   RsvpBreakdown,
   RsvpSummary,
   Team,
+  TeamKnowledge,
 } from "./domain/types";
 
 export interface TeamRepository {
@@ -77,6 +81,39 @@ export interface GroundWatchRepository {
   remove(id: string): Promise<boolean>;
 }
 
+// 🥉 Bronze: 生の観測。追記専用。
+export interface ObservationFilter {
+  teamId: string;
+  kind?: ObservationKind;
+  memberId?: string;
+}
+
+export interface ObservationRepository {
+  insert(observation: Observation): Promise<Observation>;
+  list(filter: ObservationFilter): Promise<Observation[]>;
+}
+
+// 🥇 Gold: 確信度付きの決め事。(teamId, memberId, key) で一意。
+// upsert は usecase 側で getByKey → insert/update を出し分ける (マージ規則のため)。
+export interface KnowledgeFilter {
+  teamId: string;
+  category?: KnowledgeCategory;
+  memberId?: string;
+  key?: string;
+}
+
+export interface TeamKnowledgeRepository {
+  insert(entry: TeamKnowledge): Promise<TeamKnowledge>;
+  update(entry: TeamKnowledge): Promise<TeamKnowledge>;
+  getByKey(
+    teamId: string,
+    memberId: string | null,
+    key: string,
+  ): Promise<TeamKnowledge | null>;
+  list(filter: KnowledgeFilter): Promise<TeamKnowledge[]>;
+  remove(id: string): Promise<boolean>;
+}
+
 export interface NotificationChannelRepository {
   insert(channel: NotificationChannel): Promise<NotificationChannel>;
   list(teamId: string): Promise<NotificationChannel[]>;
@@ -111,6 +148,8 @@ export interface Repositories {
   groundSlots: GroundSlotRepository;
   notifications: NotificationChannelRepository;
   groundWatches: GroundWatchRepository;
+  observations: ObservationRepository;
+  knowledge: TeamKnowledgeRepository;
 }
 
 export interface Clock {

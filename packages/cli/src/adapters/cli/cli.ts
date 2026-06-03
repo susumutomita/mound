@@ -28,8 +28,10 @@ import { runAudit } from "./commands/audit";
 import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
+import { runKnowledge } from "./commands/knowledge";
 import { runMember } from "./commands/member";
 import { runNotify } from "./commands/notify";
+import { runObserve } from "./commands/observe";
 import { runRsvp } from "./commands/rsvp";
 import { runTeam } from "./commands/team";
 import { runWatch } from "./commands/watch";
@@ -122,6 +124,12 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "watch":
         await runWatch(subArgs, ctx, renderOpts);
+        return 0;
+      case "observe":
+        await runObserve(subArgs, ctx, renderOpts);
+        return 0;
+      case "knowledge":
+        await runKnowledge(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });

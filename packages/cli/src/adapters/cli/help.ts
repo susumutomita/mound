@@ -31,6 +31,12 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   watch list --team <ID>
   watch remove <ID>
   watch test --team <ID>
+  observe add --team <ID> --kind <KIND> --body <TEXT> [--member <ID>] [--subject S] [--source S]
+  observe list --team <ID> [--kind <KIND>] [--member <ID>]
+  knowledge set --team <ID> --key <K> --value <V> [--category C] [--member ID] [--origin HUMAN|LEARNED] [--confidence 0..1] [--source S]
+  knowledge list --team <ID> [--category C] [--member ID] [--key K]
+  knowledge get --team <ID> --key <K> [--member ID]
+  knowledge forget <ID>
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -576,6 +582,57 @@ JSON 出力:
 
 JSON 出力:
   { "count": number, "slots": GroundSlot[] }
+`,
+
+  observe: `mound observe — チームの記憶 (Bronze): 会話で得た生の観測を追記
+
+サブコマンド:
+  observe add  --team <ID> --kind <KIND> --body <TEXT> [--member <ID>] [--subject S] [--source S] [--json]
+  observe list --team <ID> [--kind <KIND>] [--member <ID>] [--json]
+
+KIND:
+  PREFERENCE_HINT | ROSTER_FACT | VENUE | RULE | OPPONENT | NOTE
+
+狙い:
+  「土曜の朝が動きやすい」「鈴木は隔週で来る」など、構造を決めずまず書き留める層。
+  状態は mound (libSQL/SQLite) に永続化されるので、駆動エージェント (Hermes/Codex/Claude)
+  を差し替えても同じチーム文脈から再開できる。型付きの決め事は knowledge set へ昇格。
+
+JSON 出力:
+  Observation { id, team_id, member_id, kind, subject, body, source, observed_at, created_at }
+
+エラー:
+  - TeamNotFoundError / MemberNotFoundError (exit 2)
+`,
+
+  knowledge: `mound knowledge — チームの記憶 (Gold): 確信度付きの「決め事」
+
+サブコマンド:
+  knowledge set    --team <ID> --key <K> --value <V> [--category C] [--member ID] \\
+                   [--origin HUMAN|LEARNED] [--confidence 0..1] [--source S] [--json]
+  knowledge list   --team <ID> [--category C] [--member ID] [--key K] [--json]
+  knowledge get    --team <ID> --key <K> [--member ID] [--json]
+  knowledge forget <ID> [--json]
+
+category: PREFERENCE | RULE | ROSTER | VENUE | OPPONENT | NOTE (既定: NOTE)
+origin:   HUMAN (人が明示, 既定) | LEARNED (実績から学習)
+
+マージ規則 ((team, member, key) で upsert):
+  - HUMAN は LEARNED に上書きされない (人の決め事をピン留め)
+  - LEARNED 同士は confidence が高い方が値を握る
+  - 観測のたび evidence_count を加算 (使うほど裏付けが厚くなる)
+
+代表的な key (PREFERENCE):
+  default_ground / default_weekday / default_time / default_min_players /
+  reminder_lead_days / fee_per_person
+
+JSON 出力:
+  TeamKnowledge { id, team_id, member_id, category, key, value, origin,
+                  confidence, evidence_count, source, last_observed_at,
+                  created_at, updated_at }
+
+エラー:
+  - TeamNotFoundError / MemberNotFoundError (exit 2)
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

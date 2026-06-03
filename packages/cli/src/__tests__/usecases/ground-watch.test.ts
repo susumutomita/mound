@@ -53,6 +53,8 @@ function buildFake(): {
     groundSlots: stub,
     notifications: stub,
     groundWatches: watchRepo,
+    observations: stub,
+    knowledge: stub,
   };
   let seq = 0;
   const ctx: UseCaseContext = {

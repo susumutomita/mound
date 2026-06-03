@@ -144,6 +144,67 @@ export interface GroundWatch {
   updated_at: string;
 }
 
+// === チーム記憶レイヤ (Medallion: Bronze→Silver→Gold) ===
+// mound は「チームの記憶」。決め事を mound (libSQL/SQLite) に貯めることで、
+// 駆動するエージェント (Hermes / Codex / Claude) を差し替えても同じ文脈から動ける。
+
+// 🥉 Bronze: エージェントが会話などで得た「生の観測」。追記専用・不変。
+// 構造を決めずにまず書き留める層 (例: 「土曜の朝が動きやすい」「鈴木は隔週」)。
+export const OBSERVATION_KINDS = [
+  "PREFERENCE_HINT", // 既定値のヒント (動きやすい曜日・時間帯など)
+  "ROSTER_FACT", // メンバーに関する事実 (背番号/ポジション/常連か等)
+  "VENUE", // 会場に関する知見
+  "RULE", // 規約・会費・連絡網など
+  "OPPONENT", // 対戦相手に関する知見
+  "NOTE", // その他の自由メモ
+] as const;
+export type ObservationKind = (typeof OBSERVATION_KINDS)[number];
+
+export interface Observation {
+  id: string;
+  team_id: string;
+  member_id: string | null; // メンバー固有の観測なら紐づける
+  kind: ObservationKind;
+  subject: string | null; // 任意の見出し
+  body: string; // 観測の中身
+  source: string | null; // 出所 ("会話 2026-06-03" 等)
+  observed_at: string;
+  created_at: string;
+}
+
+// 🥇 Gold: 確信度付きの「チームの決め事」。供給用 (autopilot / 任意のエージェントが
+// 読んで行動する層)。(team_id, member_id, key) で一意 = upsert する。
+export const KNOWLEDGE_CATEGORIES = [
+  "PREFERENCE", // 既定値 (default_ground / default_weekday / fee_per_person 等)
+  "RULE", // 規約・会費ルール・ドタキャン規定
+  "ROSTER", // メンバー固有の知識
+  "VENUE", // 会場の知見
+  "OPPONENT", // 対戦相手の知見
+  "NOTE", // その他
+] as const;
+export type KnowledgeCategory = (typeof KNOWLEDGE_CATEGORIES)[number];
+
+// 決め事の出所。HUMAN = 人/エージェントが明示設定 (権威があり、学習値に上書きされない)。
+// LEARNED = 実績から学習したもの。
+export const KNOWLEDGE_ORIGINS = ["HUMAN", "LEARNED"] as const;
+export type KnowledgeOrigin = (typeof KNOWLEDGE_ORIGINS)[number];
+
+export interface TeamKnowledge {
+  id: string;
+  team_id: string;
+  member_id: string | null;
+  category: KnowledgeCategory;
+  key: string; // default_ground / fee_per_person / position 等
+  value: string;
+  origin: KnowledgeOrigin;
+  confidence: number; // 0.0–1.0
+  evidence_count: number; // 観測/裏付けの累積回数 (使うほど厚くなる)
+  source: string | null;
+  last_observed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // 外部スクレイパ (ground-reservation 等) から ingest した 1 件の空き枠。
 // slot_key = source|facility_name|date_iso|time_range (UNIQUE)
 //   ingest 時にこのキーで upsert する。
