@@ -47,6 +47,8 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   settle show --game <ID>
   settle pay --game <ID> --member <ID> [--unpaid]
   settle remind --game <ID>                   PayPay 割り勘の催促を通知
+  export [--out PATH]                          全データを JSONL で書き出す
+  import --file PATH                           JSONL を取り込む (冪等)
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -789,6 +791,39 @@ JSON 出力 (auto run):
     "proposed": AutoAction[]
   }
   AutoAction = { kind, risk, game_id, game_title, reason, transition_to, message }
+`,
+
+  export: `mound export — 全データを JSONL で書き出す (バックアップ / GitHub ミラー)
+
+使い方:
+  mound export [--out PATH] [--json]
+  mound export > backup.jsonl
+
+説明:
+  全テーブル (teams/members/games/rsvps/observations/team_knowledge/settlements 等) を
+  1 行 1 レコードの JSONL で出力する。テキストなので git で diff/merge/履歴が効く。
+  --out 無しは stdout、--out PATH でファイルに書き出す。
+
+  運用: ライブの読み書きは SQLite/Turso、git にはこの JSONL を置く2層が推奨。
+  チームごとに DB を分ける (MOUND_DB_URL=file:~/.mound/teams/<team>.db) と
+  per-team private repo へのバックアップになる。
+
+JSONL の各行:
+  { "table": string, "data": { ...row... } }
+`,
+
+  import: `mound import — JSONL を取り込む (INSERT OR REPLACE で冪等)
+
+使い方:
+  mound import --file backup.jsonl [--json]
+
+説明:
+  mound export が出した JSONL を読み、各行を INSERT OR REPLACE で復元する。
+  同じファイルを二度入れても結果は同じ (冪等)。新しい DB へのリストアや、
+  別環境への移送に使う。未知テーブル / 不正な列名の行は安全にスキップする。
+
+JSON 出力:
+  { "imported": number }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

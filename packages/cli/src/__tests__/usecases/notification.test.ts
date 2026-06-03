@@ -93,6 +93,7 @@ function buildFake(opts?: { senderError?: Error }): Fake {
     observations: stub,
     knowledge: stub,
     settlements: stub,
+    backup: stub,
   };
 
   const notifier: NotificationSender = {
