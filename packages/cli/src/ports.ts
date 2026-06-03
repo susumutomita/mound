@@ -26,12 +26,15 @@ export interface TeamRepository {
   insert(team: Team): Promise<Team>;
   list(): Promise<Team[]>;
   get(id: string): Promise<Team | null>;
+  update(team: Team): Promise<Team>;
 }
 
 export interface MemberRepository {
   insert(member: Member): Promise<Member>;
   list(teamId: string): Promise<Member[]>;
   get(id: string): Promise<Member | null>;
+  update(member: Member): Promise<Member>;
+  remove(id: string): Promise<boolean>;
 }
 
 export interface GameRepository {

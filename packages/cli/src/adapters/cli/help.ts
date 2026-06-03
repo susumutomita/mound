@@ -7,8 +7,11 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   init                                       DB を初期化する
   team create --name <N> [--area <A>]        チームを作成
   team list                                  チーム一覧
+  team update --team <ID> [--name <N>] [--area <A>]   名前/本拠地を編集
   member add --team <ID> --name <N> [--email <E>] [--role ADMIN|MEMBER]
   member list --team <ID>
+  member update --member <ID> [--name <N>] [--email <E>] [--role ADMIN|MEMBER]
+  member remove <ID>
   game create --team <ID> --title <T> [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>]
   game list [--team <ID>] [--status DRAFT|COLLECTING|CONFIRMED|...]
   game show <ID>
@@ -84,10 +87,28 @@ JSON 出力:
 サブコマンド:
   team create --name <N> [--area <A>] [--json]
   team list [--json]
+  team update --team <TEAM_ID> [--name <N>] [--area <A>] [--json]
 
 詳細:
   mound team create --help
   mound team list --help
+`,
+
+  "team update": `mound team update — チームの名前/本拠地を編集する
+
+使い方:
+  mound team update --team <TEAM_ID> [--name <NAME>] [--area <AREA>] [--json]
+
+フラグ (--name / --area のどちらか必須):
+  --team   (必須) チーム ID
+  --name   (任意) 新しいチーム名
+  --area   (任意) 新しい本拠地エリア
+
+JSON 出力:
+  Team (更新後)
+
+エラー:
+  - TeamNotFoundError (exit 2)
 `,
 
   "team create": `mound team create — チームを作成する
@@ -118,12 +139,49 @@ JSON 出力:
   member: `mound member — メンバー管理
 
 サブコマンド:
-  member add  --team <TEAM_ID> --name <N> [--email <E>] [--role ADMIN|MEMBER] [--json]
-  member list --team <TEAM_ID> [--json]
+  member add    --team <TEAM_ID> --name <N> [--email <E>] [--role ADMIN|MEMBER] [--json]
+  member list   --team <TEAM_ID> [--json]
+  member update --member <MEMBER_ID> [--name <N>] [--email <E>] [--role ADMIN|MEMBER] [--json]
+  member remove <MEMBER_ID> [--json]
+
+備考:
+  name は「表示名/ハンドル」。本名でなくニックネーム単体で構わない (本名は不要)。
+  あだ名・ポジション等の属性は mound knowledge (--category ROSTER --member) に持たせる。
 
 詳細:
   mound member add --help
   mound member list --help
+`,
+
+  "member update": `mound member update — メンバーの表示名/email/role を編集する
+
+使い方:
+  mound member update --member <MEMBER_ID> [--name <N>] [--email <E>] [--role ADMIN|MEMBER] [--json]
+
+フラグ (--name / --email / --role のいずれか必須):
+  --member  (必須) メンバー ID
+  --name    (任意) 新しい表示名 (ニックネーム可)
+  --email   (任意) 新しい email
+  --role    (任意) ADMIN | MEMBER
+
+JSON 出力:
+  Member (更新後)
+
+エラー:
+  - MemberNotFoundError (exit 2)
+`,
+
+  "member remove": `mound member remove — メンバーを削除する
+
+使い方:
+  mound member remove <MEMBER_ID> [--json]
+
+説明:
+  メンバーを削除する。出欠 (rsvps) や割り勘 (settlement_shares) は
+  ON DELETE CASCADE で一緒に消える。退団・本名を残したくない等に使う。
+
+JSON 出力:
+  { "ok": boolean, "id": string }
 `,
 
   "member add": `mound member add — メンバーを追加する

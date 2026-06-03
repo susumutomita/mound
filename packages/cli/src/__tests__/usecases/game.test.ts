@@ -62,6 +62,10 @@ function buildFake(): Fake {
     },
     list: async () => Array.from(teamStore.values()),
     get: async (id) => teamStore.get(id) ?? null,
+    update: async (t) => {
+      teamStore.set(t.id, t);
+      return t;
+    },
   };
 
   const members: MemberRepository = {
@@ -72,6 +76,11 @@ function buildFake(): Fake {
     list: async (teamId) =>
       Array.from(memberStore.values()).filter((m) => m.team_id === teamId),
     get: async (id) => memberStore.get(id) ?? null,
+    update: async (m) => {
+      memberStore.set(m.id, m);
+      return m;
+    },
+    remove: async (id) => memberStore.delete(id),
   };
 
   const games: GameRepository = {

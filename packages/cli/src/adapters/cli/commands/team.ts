@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { UseCaseContext } from "../../../ports";
-import { createTeam, listTeams } from "../../../usecases/team";
+import { createTeam, listTeams, updateTeam } from "../../../usecases/team";
 import {
   type ParsedArgs,
   UsageError,
@@ -16,16 +16,43 @@ const createInput = z.object({
   area: z.string().max(80).optional(),
 });
 
+const updateInput = z.object({
+  name: z.string().min(1).max(80).optional(),
+  area: z.string().max(80).optional(),
+});
+
 export async function runTeam(
   args: ParsedArgs,
   ctx: UseCaseContext,
   opts: RenderOptions,
 ): Promise<void> {
   const sub = args.positional[0];
-  if (!sub) throw new UsageError("使い方: mound team <create|list>");
+  if (!sub) throw new UsageError("使い方: mound team <create|list|update>");
   if (sub === "create") return create(args, ctx, opts);
   if (sub === "list") return list(ctx, opts);
+  if (sub === "update") return update(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: team ${sub}`);
+}
+
+async function update(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const teamId = requireFlag(args.flags, "team");
+  const data = parseOrUsage(updateInput, {
+    name: optionalFlag(args.flags, "name"),
+    area: optionalFlag(args.flags, "area"),
+  });
+  if (data.name === undefined && data.area === undefined) {
+    throw new UsageError("--name か --area のどちらかを指定してください");
+  }
+  const team = await updateTeam(ctx, {
+    teamId,
+    name: data.name,
+    homeArea: data.area,
+  });
+  emit(team, `チームを更新しました: ${team.id} (${team.name})`, opts);
 }
 
 async function create(

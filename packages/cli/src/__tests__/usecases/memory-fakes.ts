@@ -199,6 +199,10 @@ export function buildFakeContext(
       },
       list: async () => Array.from(teams.values()),
       get: async (id) => teams.get(id) ?? null,
+      update: async (t) => {
+        teams.set(t.id, t);
+        return t;
+      },
     },
     members: {
       insert: async (m) => {
@@ -208,6 +212,11 @@ export function buildFakeContext(
       list: async (teamId) =>
         Array.from(members.values()).filter((m) => m.team_id === teamId),
       get: async (id) => members.get(id) ?? null,
+      update: async (m) => {
+        members.set(m.id, m);
+        return m;
+      },
+      remove: async (id) => members.delete(id),
     },
     games: {
       insert: async (g) => {

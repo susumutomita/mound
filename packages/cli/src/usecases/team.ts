@@ -1,6 +1,7 @@
 import type { Team } from "../domain/types";
 import type { UseCaseContext } from "../ports";
 import { writeAuditLog } from "./audit";
+import { TeamNotFoundError } from "./errors";
 
 export interface CreateTeamInput {
   name: string;
@@ -31,4 +32,35 @@ export async function createTeam(
 
 export async function listTeams(ctx: UseCaseContext): Promise<Team[]> {
   return ctx.repo.teams.list();
+}
+
+export interface UpdateTeamInput {
+  teamId: string;
+  // undefined = 変更しない。string = その値に更新。
+  name?: string;
+  homeArea?: string;
+}
+
+export async function updateTeam(
+  ctx: UseCaseContext,
+  input: UpdateTeamInput,
+): Promise<Team> {
+  const team = await ctx.repo.teams.get(input.teamId);
+  if (!team) throw new TeamNotFoundError(input.teamId);
+  const before = { ...team };
+  const updated: Team = {
+    ...team,
+    name: input.name ?? team.name,
+    home_area: input.homeArea ?? team.home_area,
+    updated_at: ctx.now().toISOString(),
+  };
+  await ctx.repo.teams.update(updated);
+  await writeAuditLog(ctx, {
+    action: "TEAM_UPDATED",
+    targetType: "team",
+    targetId: team.id,
+    before,
+    after: updated,
+  });
+  return updated;
 }
