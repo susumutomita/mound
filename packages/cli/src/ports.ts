@@ -27,6 +27,7 @@ export interface TeamRepository {
   list(): Promise<Team[]>;
   get(id: string): Promise<Team | null>;
   update(team: Team): Promise<Team>;
+  remove(id: string): Promise<boolean>;
 }
 
 export interface MemberRepository {
@@ -46,6 +47,7 @@ export interface GameRepository {
     status: GameStatus,
     updatedAt: string,
   ): Promise<void>;
+  update(game: Game): Promise<Game>;
 }
 
 export interface RsvpRepository {

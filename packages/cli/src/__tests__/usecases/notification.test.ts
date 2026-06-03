@@ -49,6 +49,7 @@ function buildFake(opts?: { senderError?: Error }): Fake {
       teams.set(t.id, t);
       return t;
     },
+    remove: async (id) => teams.delete(id),
   };
 
   const notificationRepo: NotificationChannelRepository = {

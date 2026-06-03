@@ -66,6 +66,7 @@ function buildFake(): Fake {
       teamStore.set(t.id, t);
       return t;
     },
+    remove: async (id) => teamStore.delete(id),
   };
 
   const members: MemberRepository = {
@@ -98,6 +99,10 @@ function buildFake(): Fake {
     updateStatus: async (id, status, updatedAt) => {
       const g = gameStore.get(id);
       if (g) gameStore.set(id, { ...g, status, updated_at: updatedAt });
+    },
+    update: async (g) => {
+      gameStore.set(g.id, g);
+      return g;
     },
   };
 

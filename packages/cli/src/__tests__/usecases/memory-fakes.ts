@@ -203,6 +203,7 @@ export function buildFakeContext(
         teams.set(t.id, t);
         return t;
       },
+      remove: async (id) => teams.delete(id),
     },
     members: {
       insert: async (m) => {
@@ -233,6 +234,10 @@ export function buildFakeContext(
       updateStatus: async (id, status, updatedAt) => {
         const g = games.get(id);
         if (g) games.set(id, { ...g, status, updated_at: updatedAt });
+      },
+      update: async (g) => {
+        games.set(g.id, g);
+        return g;
       },
     },
     rsvps: {

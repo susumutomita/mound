@@ -1,4 +1,4 @@
-import type { Team } from "../domain/types";
+import type { Member, Team, TeamKnowledge } from "../domain/types";
 import type { UseCaseContext } from "../ports";
 import { writeAuditLog } from "./audit";
 import { TeamNotFoundError } from "./errors";
@@ -63,4 +63,44 @@ export async function updateTeam(
     after: updated,
   });
   return updated;
+}
+
+// チームのプロフィールを 1 回で取得する (別セッション/別エージェントへの引き継ぎ用)。
+export interface TeamProfile {
+  team: Team;
+  members: Member[];
+  knowledge: TeamKnowledge[];
+}
+
+export async function showTeam(
+  ctx: UseCaseContext,
+  teamId: string,
+): Promise<TeamProfile> {
+  const team = await ctx.repo.teams.get(teamId);
+  if (!team) throw new TeamNotFoundError(teamId);
+  const [members, knowledge] = await Promise.all([
+    ctx.repo.members.list(team.id),
+    ctx.repo.knowledge.list({ teamId: team.id }),
+  ]);
+  return { team, members, knowledge };
+}
+
+// チームを削除する。members / games / rsvps / knowledge / settlements 等は
+// ON DELETE CASCADE で一緒に消える。
+export async function removeTeam(
+  ctx: UseCaseContext,
+  id: string,
+): Promise<boolean> {
+  const team = await ctx.repo.teams.get(id);
+  if (!team) return false;
+  const removed = await ctx.repo.teams.remove(id);
+  if (removed) {
+    await writeAuditLog(ctx, {
+      action: "TEAM_REMOVED",
+      targetType: "team",
+      targetId: id,
+      before: team,
+    });
+  }
+  return removed;
 }

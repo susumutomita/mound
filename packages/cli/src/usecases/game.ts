@@ -53,6 +53,43 @@ export async function createGame(
   return game;
 }
 
+export interface UpdateGameInput {
+  gameId: string;
+  // undefined = 変更しない。既存 game の note 後更新もこれで可能 (AGENTS.md §9 解消)。
+  title?: string;
+  date?: string | null;
+  ground?: string | null;
+  minPlayers?: number;
+  note?: string | null;
+}
+
+export async function updateGame(
+  ctx: UseCaseContext,
+  input: UpdateGameInput,
+): Promise<Game> {
+  const game = await ctx.repo.games.get(input.gameId);
+  if (!game) throw new GameNotFoundError(input.gameId);
+  const before = { ...game };
+  const updated: Game = {
+    ...game,
+    title: input.title ?? game.title,
+    game_date: input.date === undefined ? game.game_date : input.date,
+    ground_name: input.ground === undefined ? game.ground_name : input.ground,
+    min_players: input.minPlayers ?? game.min_players,
+    note: input.note === undefined ? game.note : input.note,
+    updated_at: ctx.now().toISOString(),
+  };
+  await ctx.repo.games.update(updated);
+  await writeAuditLog(ctx, {
+    action: "GAME_UPDATED",
+    targetType: "game",
+    targetId: game.id,
+    before,
+    after: updated,
+  });
+  return updated;
+}
+
 export interface ListGamesInput {
   teamId?: string;
   status?: GameStatus;
