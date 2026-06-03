@@ -43,6 +43,14 @@ export class SettlementError extends Error {
   }
 }
 
+// 入力が不足/不正でドメイン的に進められないとき。CLI では exit 2。
+export class InvalidInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidInputError";
+  }
+}
+
 export interface TransitionDeniedDetails {
   from: GameStatus;
   to: GameStatus;

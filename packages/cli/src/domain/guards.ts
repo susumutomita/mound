@@ -1,6 +1,8 @@
 import {
   GAME_STATUSES,
+  GROUND_STATUSES,
   type GameStatus,
+  type GroundStatus,
   KNOWLEDGE_CATEGORIES,
   KNOWLEDGE_ORIGINS,
   type KnowledgeCategory,
@@ -48,6 +50,20 @@ export class DomainInvariantError extends Error {
 export function assertGameStatus(value: unknown): GameStatus {
   if (!isGameStatus(value)) {
     throw new DomainInvariantError(`不正な GameStatus: ${String(value)}`);
+  }
+  return value;
+}
+
+export function isGroundStatus(value: unknown): value is GroundStatus {
+  return (
+    typeof value === "string" &&
+    (GROUND_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function assertGroundStatus(value: unknown): GroundStatus {
+  if (!isGroundStatus(value)) {
+    throw new DomainInvariantError(`不正な GroundStatus: ${String(value)}`);
   }
   return value;
 }

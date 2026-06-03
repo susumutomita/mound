@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const SCHEMA_SQL = `
 -- スキーマ版を記録するメタテーブル。PRAGMA user_version の書き込みは Turso (sqld)
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS games (
   ),
   game_date TEXT,
   ground_name TEXT,
+  ground_status TEXT,
   min_players INTEGER NOT NULL DEFAULT 9,
   note TEXT,
   created_at TEXT NOT NULL,

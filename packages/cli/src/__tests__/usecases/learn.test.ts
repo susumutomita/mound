@@ -33,6 +33,7 @@ async function addGame(
     status,
     game_date: date,
     ground_name: ground,
+    ground_status: null,
     min_players: 9,
     note: null,
     created_at: "x",

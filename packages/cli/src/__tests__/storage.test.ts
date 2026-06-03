@@ -39,6 +39,7 @@ function createGame(overrides: Partial<Game> = {}): Game {
     status: "DRAFT",
     game_date: "2026-06-01",
     ground_name: null,
+    ground_status: null,
     min_players: 9,
     note: null,
     created_at: "2026-05-20T00:00:00.000Z",

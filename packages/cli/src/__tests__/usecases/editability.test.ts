@@ -146,6 +146,7 @@ describe("updateGame use case", () => {
         status: "DRAFT" as GameStatus,
         game_date: null,
         ground_name: null,
+        ground_status: null,
         min_players: 9,
         note: null,
         created_at: "x",

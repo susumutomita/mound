@@ -55,4 +55,31 @@ describe("schema migration", () => {
       db.close();
     });
   });
+
+  describe("追加カラム migration", () => {
+    it("games.ground_status 列が存在する", async () => {
+      const db = openDb({ url: ":memory:" });
+      await migrate(db);
+      // 列が無ければ "no such column" で throw する。
+      await expect(
+        db.execute("SELECT ground_status FROM games"),
+      ).resolves.toBeDefined();
+      db.close();
+    });
+
+    it("ground_status 列が無い旧 games テーブルにも ALTER で後付けされる", async () => {
+      const db = openDb({ url: ":memory:" });
+      // ground_status を持たない旧スキーマの games を用意。
+      await db.execute(
+        `CREATE TABLE games (id TEXT PRIMARY KEY, team_id TEXT, title TEXT,
+           status TEXT, game_date TEXT, ground_name TEXT,
+           min_players INTEGER, note TEXT, created_at TEXT, updated_at TEXT)`,
+      );
+      await migrate(db);
+      await expect(
+        db.execute("SELECT ground_status FROM games"),
+      ).resolves.toBeDefined();
+      db.close();
+    });
+  });
 });

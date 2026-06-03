@@ -15,6 +15,7 @@ const USER_ERROR_NAMES = new Set([
   "MemberNotFoundError",
   "CrossTeamRsvpError",
   "SettlementError",
+  "InvalidInputError",
 ]);
 
 function isUserError(e: unknown): boolean {

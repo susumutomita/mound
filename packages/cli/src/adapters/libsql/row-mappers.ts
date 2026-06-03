@@ -1,6 +1,7 @@
 import type { InValue, Row } from "@libsql/client";
 import {
   assertGameStatus,
+  assertGroundStatus,
   assertKnowledgeCategory,
   assertKnowledgeOrigin,
   assertMemberRole,
@@ -59,6 +60,9 @@ export function rowToGame(row: Row): Game {
     status: assertGameStatus(str(row.status)),
     game_date: nullable(row.game_date),
     ground_name: nullable(row.ground_name),
+    ground_status: row.ground_status
+      ? assertGroundStatus(str(row.ground_status))
+      : null,
     min_players: Number(row.min_players),
     note: nullable(row.note),
     created_at: str(row.created_at),

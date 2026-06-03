@@ -1,18 +1,23 @@
 import { checkGuard, getAvailableTransitions } from "../domain/state-machine";
-import type {
-  Game,
-  GameStatus,
-  GroundSlot,
-  RsvpBreakdown,
+import {
+  type Game,
+  type GameStatus,
+  type GroundSlot,
+  type GroundStatus,
+  type RsvpBreakdown,
+  WEEKDAY_CODES,
+  type WeekdayCode,
 } from "../domain/types";
 import type { UseCaseContext } from "../ports";
 import { writeAuditLog } from "./audit";
 import {
   GameNotFoundError,
+  InvalidInputError,
   TeamNotFoundError,
   TransitionDeniedError,
 } from "./errors";
 import { findSlotsMatchingGame } from "./ground";
+import { getTeamPreferences } from "./knowledge";
 import { notifyGameTransition } from "./notification";
 
 export interface CreateGameInput {
@@ -20,6 +25,7 @@ export interface CreateGameInput {
   title: string;
   date: string | null;
   ground: string | null;
+  groundStatus: GroundStatus | null;
   minPlayers: number;
   note: string | null;
 }
@@ -38,6 +44,7 @@ export async function createGame(
     status: "DRAFT",
     game_date: input.date,
     ground_name: input.ground,
+    ground_status: input.groundStatus,
     min_players: input.minPlayers,
     note: input.note,
     created_at: now,
@@ -59,6 +66,7 @@ export interface UpdateGameInput {
   title?: string;
   date?: string | null;
   ground?: string | null;
+  groundStatus?: GroundStatus | null;
   minPlayers?: number;
   note?: string | null;
 }
@@ -75,6 +83,10 @@ export async function updateGame(
     title: input.title ?? game.title,
     game_date: input.date === undefined ? game.game_date : input.date,
     ground_name: input.ground === undefined ? game.ground_name : input.ground,
+    ground_status:
+      input.groundStatus === undefined
+        ? game.ground_status
+        : input.groundStatus,
     min_players: input.minPlayers ?? game.min_players,
     note: input.note === undefined ? game.note : input.note,
     updated_at: ctx.now().toISOString(),
@@ -88,6 +100,82 @@ export async function updateGame(
     after: updated,
   });
   return updated;
+}
+
+export interface GenerateMonthlyGamesInput {
+  teamId: string;
+  month: string; // "YYYY-MM"
+  weekday?: WeekdayCode; // 未指定なら knowledge の default_weekday
+  ground?: string | null; // 未指定なら default_ground
+  minPlayers?: number; // 未指定なら default_min_players か 9
+  title?: string;
+}
+
+// 月次ルーティン用: 指定月の該当曜日ぶんの候補試合を DRAFT(ground_status=WANTED)で
+// 一括生成する。チームの決め事(default_weekday/ground/min_players)を既定値に使う。
+// 既に試合がある日付はスキップするので再実行しても重複しない。
+export async function generateMonthlyGames(
+  ctx: UseCaseContext,
+  input: GenerateMonthlyGamesInput,
+): Promise<Game[]> {
+  const team = await ctx.repo.teams.get(input.teamId);
+  if (!team) throw new TeamNotFoundError(input.teamId);
+
+  const prefs = new Map(
+    (await getTeamPreferences(ctx, team.id)).map((p) => [p.key, p.value]),
+  );
+  const weekday =
+    input.weekday ?? (prefs.get("default_weekday") as WeekdayCode | undefined);
+  if (!weekday || !(WEEKDAY_CODES as readonly string[]).includes(weekday)) {
+    throw new InvalidInputError(
+      "活動曜日が不明です (--weekday を指定するか knowledge set default_weekday)",
+    );
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(input.month);
+  if (!m)
+    throw new InvalidInputError("--month は YYYY-MM 形式で指定してください");
+  const year = Number(m[1]);
+  const month0 = Number(m[2]) - 1;
+  if (month0 < 0 || month0 > 11) {
+    throw new InvalidInputError("--month の月は 01-12 です");
+  }
+
+  const ground = input.ground ?? prefs.get("default_ground") ?? null;
+  const minPlayers =
+    input.minPlayers ?? (Number(prefs.get("default_min_players")) || 9);
+  const title = input.title ?? "練習試合";
+
+  const weekdayIdx = (WEEKDAY_CODES as readonly string[]).indexOf(weekday);
+  const daysInMonth = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+  const dates: string[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dt = new Date(Date.UTC(year, month0, d));
+    if (dt.getUTCDay() === weekdayIdx)
+      dates.push(dt.toISOString().slice(0, 10));
+  }
+
+  // 既に試合がある日付はスキップ (再実行で重複しない)。
+  const existing = await ctx.repo.games.list({ teamId: team.id });
+  const existingDates = new Set(
+    existing.map((g) => g.game_date).filter((d): d is string => d !== null),
+  );
+
+  const created: Game[] = [];
+  for (const date of dates) {
+    if (existingDates.has(date)) continue;
+    created.push(
+      await createGame(ctx, {
+        teamId: team.id,
+        title,
+        date,
+        ground,
+        groundStatus: "WANTED",
+        minPlayers,
+        note: null,
+      }),
+    );
+  }
+  return created;
 }
 
 export interface ListGamesInput {

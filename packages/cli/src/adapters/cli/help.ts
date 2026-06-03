@@ -16,10 +16,11 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   member list --team <ID>
   member update --member <ID> [--name <N>] [--email <E>] [--role ADMIN|MEMBER]
   member remove <ID>
-  game create --team <ID> --title <T> [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>]
+  game create --team <ID> --title <T> [--date YYYY-MM-DD] [--ground <G>] [--ground-status WANTED|APPLIED|SECURED|LOST] [--min-players <N>] [--note <NOTE>]
   game list [--team <ID>] [--status DRAFT|COLLECTING|CONFIRMED|...]
   game show <ID>
-  game update <ID> [--title <T>] [--date YYYY-MM-DD] [--ground <G>] [--min-players <N>] [--note <NOTE>]
+  game update <ID> [--title <T>] [--date YYYY-MM-DD] [--ground <G>] [--ground-status <S>] [--min-players <N>] [--note <NOTE>]
+  game generate --team <ID> --month YYYY-MM [--weekday sat] [--ground <G>] [--min-players <N>] [--title <T>]
   game transition <ID> --to COLLECTING|CONFIRMED|COMPLETED|SETTLED|CANCELLED
   rsvp set --game <ID> --member <ID> --response AVAILABLE|UNAVAILABLE|MAYBE
   rsvp list --game <ID>
@@ -254,6 +255,17 @@ JSON 出力:
   game list       [--team <TEAM_ID>] [--status <STATUS>] [--json]
   game show       <GAME_ID> [--json]
   game transition <GAME_ID> --to <STATUS> [--json]
+
+会場の確保状況 (ground_status, 月次の抽選予約ルーティン用):
+  WANTED   希望/未着手    APPLIED  抽選申込済
+  SECURED  確保済         LOST     落選 (→ キャンセル監視へ)
+  例: mound game update <ID> --ground-status APPLIED
+
+月次の候補生成:
+  mound game generate --team <ID> --month 2026-07
+  → その月の活動曜日 (knowledge の default_weekday か --weekday) ぶんの試合を
+    DRAFT (ground_status=WANTED) で一括生成。default_ground/min_players も決め事から補完。
+    既に試合がある日付はスキップ (再実行で重複しない)。
 
 状態遷移 (有効パス):
   DRAFT      → COLLECTING / CONFIRMED / CANCELLED
