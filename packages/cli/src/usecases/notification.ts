@@ -85,6 +85,15 @@ async function dispatch(
   );
 }
 
+// 任意のメッセージをチームの enabled channel 全てに送る公開口 (autopilot 等が使う)。
+export async function notifyTeam(
+  ctx: UseCaseContext,
+  teamId: string,
+  message: string,
+): Promise<NotificationDeliveryResult[]> {
+  return dispatch(ctx, teamId, message);
+}
+
 function formatGameTransitionMessage(
   game: Game,
   from: GameStatus,

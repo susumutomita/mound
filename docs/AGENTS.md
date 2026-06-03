@@ -50,6 +50,32 @@ memory には書かず、必ずここに書き戻してください。
 セッション開始時は `mound knowledge list --team T --json` と `mound observe list --team T --json`
 を読めば、そのチームの決め事・知見をまるごと引き継げます。
 
+#### 使うほど賢くなる: `mound learn`
+
+`mound learn --team T` は過去の試合・出欠から **default_ground / default_weekday /
+メンバー出席率** を確信度付きで再導出し、`--apply` で Gold に LEARNED として書き戻します
+(`origin=HUMAN` の決め事はピン留めされ触られません)。定期的に回すほどチームの「いつもの」が
+育ちます。Hermes は試合が一区切りした (`SETTLED`/`COMPLETED`) タイミングや日次で実行すると良いです。
+
+#### 自律運用: `mound auto` + cron
+
+`mound auto run --team T --apply` は現在状態 (agenda) から打つべき手を算出し、**安全な手は自動実行・
+チームを拘束する手は提案**に分けます。
+
+- SAFE (自動): `PUBLISH` (DRAFT→COLLECTING) / `COMPLETE` (試合日経過→COMPLETED) / 出欠・精算リマインド通知
+- NEEDS_APPROVAL (提案のみ): `CONFIRM` (人数充足→CONFIRMED。チームを拘束するので人が決める)
+
+cron/launchd で定期実行すれば**人手ゼロで回り続けます**。Hermes が運用ループを担う場合は
+`mound auto plan --json` を読み、SAFE は自動で `auto run --apply`、`proposed` の NEEDS_APPROVAL は
+ユーザに確認してから個別に `mound game transition` を叩く、という分担が綺麗です。
+
+```bash
+# 例: 30 分おきに球場同期 + 自律運用 (SAFE のみ自動)
+*/30 * * * * mound ground sync --region all --notify --team "$TEAM" --json >/dev/null
+0    8 * * * mound auto run --team "$TEAM" --apply --json >>~/.mound/auto.log
+0    9 * * 1 mound learn --team "$TEAM" --apply --json >>~/.mound/learn.log
+```
+
 **会話で発見した情報は、書ける所があるなら必ず書く。書けない情報があれば §9 の「現在書けないこと」に該当するので、Hermes はそれを **未解決 task として TODO 化** してユーザに告知してください**。
 
 ### ステップ 0: 新しいチームに初めて触れたとき
@@ -218,6 +244,9 @@ Hermes は以下を **必ず守ること**:
 | `knowledge list` | `--team [--category --member --key]` | `TeamKnowledge[]` |
 | `knowledge get` | `--team --key [--member]` | `TeamKnowledge \| {found:false}` |
 | `knowledge forget` | `<id>` | `{ok, id}` |
+| `learn` | `--team [--apply]` | `LearnResult` (履歴から決め事を学習) |
+| `auto plan` | `--team [--horizon-days]` | `AutoPlan` (打つべき手, read-only) |
+| `auto run` | `--team [--apply --horizon-days]` | `AutoRunResult` (SAFE は自動・要承認は提案) |
 
 サブコマンドの詳細は `mound <command> [sub] --help` で取れます (実装は `packages/cli/src/adapters/cli/help.ts`)。
 

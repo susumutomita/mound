@@ -38,6 +38,8 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   knowledge get --team <ID> --key <K> [--member ID]
   knowledge forget <ID>
   learn --team <ID> [--apply]                過去の試合・出欠から決め事を学習
+  auto plan --team <ID> [--horizon-days N]    いま打つべき手を算出 (read-only)
+  auto run --team <ID> [--apply] [--horizon-days N]  安全な手は自動・拘束する手は提案
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -663,6 +665,37 @@ JSON 出力:
     "facts": [{ category, key, value, confidence, evidence_count, member_id, member_name, rationale }],
     "pinned_skips": string[]
   }
+`,
+
+  auto: `mound auto — autopilot: いま打つべき手を算出し、安全な手は自動・拘束する手は提案
+
+サブコマンド:
+  auto plan --team <ID> [--horizon-days N] [--json]            read-only。打つべき手の一覧
+  auto run  --team <ID> [--apply] [--horizon-days N] [--json]  SAFE な手を自動実行 (--apply 時)
+
+原則「AI は提案する。人が最後に決める」:
+  - SAFE          … --apply で自動実行
+      PUBLISH            DRAFT → COLLECTING (出欠回収を開始)
+      COMPLETE          CONFIRMED → COMPLETED (試合日が経過)
+      REMIND_COLLECTING 出欠が足りない試合へリマインド通知
+      REMIND_SETTLEMENT 精算待ちへリマインド通知
+  - NEEDS_APPROVAL … 常に提案のみ (人が実行)
+      CONFIRM           COLLECTING → CONFIRMED (人数充足、チームを拘束する確定)
+
+挙動:
+  - agenda (現在状態) を読んで手を導出する
+  - 遷移は既存の game transition を呼ぶ (ガード・監査・通知が自動で効く)
+  - cron で定期実行すれば人手ゼロで回り続ける。駆動は Hermes/Codex/Claude でも可
+
+JSON 出力 (auto run):
+  {
+    "team_id": string, "generated_at": ISO8601, "horizon_days": number,
+    "applied": boolean,
+    "actions": AutoAction[],
+    "executed": [{ action, ok, error, deliveries? }],
+    "proposed": AutoAction[]
+  }
+  AutoAction = { kind, risk, game_id, game_title, reason, transition_to, message }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

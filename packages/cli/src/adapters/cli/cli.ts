@@ -25,6 +25,7 @@ import type { NotificationSender } from "../../ports";
 import { TransitionDeniedError } from "../../usecases/errors";
 import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
+import { runAuto } from "./commands/auto";
 import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
@@ -134,6 +135,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "learn":
         await runLearn(subArgs, ctx, renderOpts);
+        return 0;
+      case "auto":
+        await runAuto(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });
