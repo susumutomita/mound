@@ -27,7 +27,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   rsvp summary --game <ID>
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
-  view --team <ID> [--horizon-days N] --json  今の状態を 1 コマンドで構造化スナップショット (UI 生成の土台)
+  view --team <ID> [--member <ID>] [--horizon-days N] --json  状態スナップショット (--member で個人の関心事だけ)
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
   ground list [--source S] [--date YYYY-MM-DD] [--all]  既定=実行時点以降の空き
   ground prune [--before-date YYYY-MM-DD] [--max-age-hours N]  過去/古い/テストを掃除
@@ -902,15 +902,21 @@ JSON 出力:
   SPEC の「UI が文脈に合わせて変わる / 今やるべきことだけ表示」を、テンプレではなく
   AI 生成で実現するための土台。
 
-JSON 出力:
+JSON 出力 (--member 無し = 代表/全体ビュー):
   {
-    "team": Team,
-    "generated_at": ISO8601,
-    "horizon_days": number,
+    "team": Team, "generated_at": ISO8601, "horizon_days": number,
     "agenda": Agenda,
     "games": [{ game, rsvp, available, unavailable, maybe, no_response, shortage, settlement }],
     "ground_slots": GroundSlot[],   // 実行時点以降
     "knowledge": TeamKnowledge[]
+  }
+
+JSON 出力 (--member M = その人の関心事だけ。必要十分):
+  {
+    "team": Team, "member": Member, "generated_at": ISO8601,
+    "needs_response": Game[],   // 出欠まだ (要アクション)
+    "upcoming": [{ game, my_response }],   // 参加予定
+    "dues": [{ game, amount, payment_link, payment_label }]   // 自分の未払い精算
   }
 `,
 
