@@ -27,6 +27,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   rsvp summary --game <ID>
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
+  view --team <ID> [--horizon-days N] --json  今の状態を 1 コマンドで構造化スナップショット (UI 生成の土台)
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
   ground list [--source S] [--date YYYY-MM-DD] [--all]  既定=実行時点以降の空き
   ground prune [--before-date YYYY-MM-DD] [--max-age-hours N]  過去/古い/テストを掃除
@@ -888,6 +889,29 @@ JSONL の各行:
 
 JSON 出力:
   { "imported": number }
+`,
+
+  view: `mound view — 今のチーム状態を 1 コマンドで構造化スナップショット
+
+使い方:
+  mound view --team <TEAM_ID> [--horizon-days N] [--json]
+
+狙い:
+  固定 UI は持たない (デザインに縛られない)。これは「今の関心事」を判断するための
+  データ供給。エージェントが --json を取り、現状に合わせて UI (HTML 等) を動的生成する。
+  SPEC の「UI が文脈に合わせて変わる / 今やるべきことだけ表示」を、テンプレではなく
+  AI 生成で実現するための土台。
+
+JSON 出力:
+  {
+    "team": Team,
+    "generated_at": ISO8601,
+    "horizon_days": number,
+    "agenda": Agenda,
+    "games": [{ game, rsvp, available, unavailable, maybe, no_response, shortage, settlement }],
+    "ground_slots": GroundSlot[],   // 実行時点以降
+    "knowledge": TeamKnowledge[]
+  }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

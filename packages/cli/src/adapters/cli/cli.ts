@@ -41,6 +41,7 @@ import { runObserve } from "./commands/observe";
 import { runRsvp } from "./commands/rsvp";
 import { runSettle } from "./commands/settle";
 import { runTeam } from "./commands/team";
+import { runView } from "./commands/view";
 import { runWatch } from "./commands/watch";
 import { composeContext } from "./compose";
 import { HELP, VERSION, findCommandHelp } from "./help";
@@ -142,6 +143,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "knowledge":
         await runKnowledge(subArgs, ctx, renderOpts);
+        return 0;
+      case "view":
+        await runView(subArgs, ctx, renderOpts);
         return 0;
       case "learn":
         await runLearn(subArgs, ctx, renderOpts);
