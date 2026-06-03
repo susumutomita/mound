@@ -37,6 +37,7 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   knowledge list --team <ID> [--category C] [--member ID] [--key K]
   knowledge get --team <ID> --key <K> [--member ID]
   knowledge forget <ID>
+  learn --team <ID> [--apply]                過去の試合・出欠から決め事を学習
 
 環境変数 (追加):
   MOUND_NOTIFY_MODE     log-only | disabled | (未指定=実 HTTP)
@@ -633,6 +634,35 @@ JSON 出力:
 
 エラー:
   - TeamNotFoundError / MemberNotFoundError (exit 2)
+`,
+
+  learn: `mound learn — 過去の試合・出欠からチームの決め事を学習 (Silver→Gold)
+
+使い方:
+  mound learn --team <TEAM_ID> [--apply] [--json]
+
+フラグ:
+  --team    (必須) チーム ID
+  --apply   (任意) Gold (team_knowledge) に反映する。未指定は dry-run (提案のみ)
+
+学習する決め事:
+  - default_ground   : よく使う会場 (ground_name の最頻値)
+  - default_weekday  : よくやる曜日 (game_date の曜日の最頻値)
+  - attendance_rate  : メンバーごとの出席率 (回答試合中 AVAILABLE の割合)
+
+挙動:
+  - 毎回その時点の履歴から再計算する (傾向が変われば値も入れ替わる = 降格も効く)
+  - origin=HUMAN の決め事は touch しない (ピン留め)。pinned_skips で報告
+  - 最低 2 件の裏付けがある決め事だけを出す
+
+JSON 出力:
+  {
+    "team_id": string,
+    "generated_at": ISO8601,
+    "applied": boolean,
+    "facts": [{ category, key, value, confidence, evidence_count, member_id, member_name, rationale }],
+    "pinned_skips": string[]
+  }
 `,
 
   agenda: `mound agenda — いま注意すべき試合 (メニューバー向け)

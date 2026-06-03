@@ -29,6 +29,7 @@ import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
 import { runKnowledge } from "./commands/knowledge";
+import { runLearn } from "./commands/learn";
 import { runMember } from "./commands/member";
 import { runNotify } from "./commands/notify";
 import { runObserve } from "./commands/observe";
@@ -130,6 +131,9 @@ export async function run(options: RunOptions): Promise<number> {
         return 0;
       case "knowledge":
         await runKnowledge(subArgs, ctx, renderOpts);
+        return 0;
+      case "learn":
+        await runLearn(subArgs, ctx, renderOpts);
         return 0;
       default:
         emitError(`未知のコマンド: ${command}`, { json, sink: stderr });

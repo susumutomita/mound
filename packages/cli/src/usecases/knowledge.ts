@@ -122,6 +122,81 @@ export async function forgetKnowledge(
   return ctx.repo.knowledge.remove(id);
 }
 
+export interface LearnedFactInput {
+  teamId: string;
+  memberId: string | null;
+  category: KnowledgeCategory;
+  key: string;
+  value: string;
+  confidence: number;
+  evidenceCount: number;
+  source: string | null;
+}
+
+// 学習 (mound learn) から Gold を書く専用口。recordKnowledge の「観測ごとに加算」
+// とは異なり、その時点の履歴から再導出した値で LEARNED 行を上書きする (= 降格も効く)。
+// origin=HUMAN の決め事は触らない (ピン留め)。pinned=true で「人の決め事を尊重して
+// スキップした」ことを呼び出し側に伝える。
+export async function upsertLearnedFact(
+  ctx: UseCaseContext,
+  input: LearnedFactInput,
+): Promise<{ entry: TeamKnowledge; pinned: boolean }> {
+  const now = ctx.now().toISOString();
+  const existing = await ctx.repo.knowledge.getByKey(
+    input.teamId,
+    input.memberId,
+    input.key,
+  );
+  if (existing && existing.origin === "HUMAN") {
+    return { entry: existing, pinned: true };
+  }
+  if (!existing) {
+    const entry: TeamKnowledge = {
+      id: ctx.newId(),
+      team_id: input.teamId,
+      member_id: input.memberId,
+      category: input.category,
+      key: input.key,
+      value: input.value,
+      origin: "LEARNED",
+      confidence: input.confidence,
+      evidence_count: input.evidenceCount,
+      source: input.source,
+      last_observed_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+    await ctx.repo.knowledge.insert(entry);
+    await writeAuditLog(ctx, {
+      action: "KNOWLEDGE_LEARNED",
+      targetType: "team_knowledge",
+      targetId: entry.id,
+      after: entry,
+    });
+    return { entry, pinned: false };
+  }
+  const updated: TeamKnowledge = {
+    ...existing,
+    category: input.category,
+    value: input.value,
+    origin: "LEARNED",
+    confidence: input.confidence,
+    evidence_count: input.evidenceCount,
+    source: input.source,
+    last_observed_at: now,
+    updated_at: now,
+  };
+  await ctx.repo.knowledge.update(updated);
+  await writeAuditLog(ctx, {
+    action: "KNOWLEDGE_LEARNED",
+    targetType: "team_knowledge",
+    targetId: updated.id,
+    before: existing,
+    after: updated,
+  });
+  return { entry: updated, pinned: false };
+}
+
 export interface TeamPreference {
   key: string;
   value: string;
