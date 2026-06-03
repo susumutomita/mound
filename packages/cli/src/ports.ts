@@ -67,7 +67,6 @@ export interface GroundSlotFilter {
   source?: string;
   dateIso?: string;
   sinceDate?: string; // date_iso >= この日 (YYYY-MM-DD)。過去日を除外する用。
-  ingestedSince?: string; // ingested_at >= この時刻 (ISO)。古い取得を除外する用。
 }
 
 // 古い/過去/テストの slot を物理削除する条件。
