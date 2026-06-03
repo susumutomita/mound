@@ -66,6 +66,14 @@ export interface AuditRepository {
 export interface GroundSlotFilter {
   source?: string;
   dateIso?: string;
+  sinceDate?: string; // date_iso >= この日 (YYYY-MM-DD)。過去日を除外する用。
+  ingestedSince?: string; // ingested_at >= この時刻 (ISO)。古い取得を除外する用。
+}
+
+// 古い/過去/テストの slot を物理削除する条件。
+export interface GroundSlotPruneFilter {
+  beforeDate?: string; // date_iso < この日 を削除
+  ingestedBefore?: string; // ingested_at < この時刻 を削除
 }
 
 export interface GroundSlotDiffFilter extends GroundSlotFilter {
@@ -79,6 +87,8 @@ export interface GroundSlotRepository {
   list(filter: GroundSlotFilter): Promise<GroundSlot[]>;
   listNewerThan(filter: GroundSlotDiffFilter): Promise<GroundSlot[]>;
   getByKey(slotKey: string): Promise<GroundSlot | null>;
+  // 過去日 / 古い取得 / テストデータ (動作確認) を削除し、削除件数を返す。
+  prune(filter: GroundSlotPruneFilter): Promise<number>;
 }
 
 export interface GroundWatchRepository {

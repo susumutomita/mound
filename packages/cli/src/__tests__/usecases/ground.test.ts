@@ -37,6 +37,7 @@ function fakeRepo(): {
           (!filter.dateIso || s.date_iso === filter.dateIso),
       ),
     getByKey: async (k) => store.get(k) ?? null,
+    prune: async () => 0,
   };
   return { store, repo };
 }

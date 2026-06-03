@@ -196,6 +196,7 @@ function buildFake(): Fake {
           (!filter.dateIso || s.date_iso === filter.dateIso),
       ),
     getByKey: async (slotKey) => groundStore.get(slotKey) ?? null,
+    prune: async () => 0,
   };
 
   const notificationStore = new Map<string, NotificationChannel>();
