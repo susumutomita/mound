@@ -1,7 +1,7 @@
 // view (ダッシュボード) のデータ集計テスト。UI 生成の土台が正しく集まるか。
 import { describe, expect, it } from "vitest";
 import type { UseCaseContext } from "../../ports";
-import { buildDashboard } from "../../usecases/dashboard";
+import { buildDashboard, buildMemberView } from "../../usecases/dashboard";
 import { buildFakeContext } from "./memory-fakes";
 
 async function seed(ctx: UseCaseContext): Promise<void> {
@@ -75,6 +75,49 @@ describe("buildDashboard use case", () => {
       await expect(
         buildDashboard(ctx, { teamId: "nope", horizonDays: 14 }),
       ).rejects.toThrow(/team が存在しません/);
+    });
+  });
+});
+
+describe("buildMemberView use case", () => {
+  describe("出欠未回答の COLLECTING があるとき", () => {
+    it("そのメンバーの『要回答』に出る", async () => {
+      const { ctx } = buildFakeContext("2026-06-03T09:00:00.000Z");
+      await seed(ctx); // g = COLLECTING 6/6, トミー未回答
+      const v = await buildMemberView(ctx, { teamId: "t", memberId: "m1" });
+      expect(v.member.name).toBe("トミー");
+      expect(v.needs_response.map((g) => g.id)).toEqual(["g"]);
+      expect(v.upcoming).toHaveLength(0);
+      expect(v.dues).toHaveLength(0);
+    });
+  });
+
+  describe("AVAILABLE で回答したとき", () => {
+    it("要回答から消え、参加予定に入る", async () => {
+      const { ctx } = buildFakeContext("2026-06-03T09:00:00.000Z");
+      await seed(ctx);
+      await ctx.repo.rsvps.upsert({
+        id: "r",
+        game_id: "g",
+        member_id: "m1",
+        response: "AVAILABLE",
+        responded_at: "x",
+        created_at: "x",
+        updated_at: "x",
+      });
+      const v = await buildMemberView(ctx, { teamId: "t", memberId: "m1" });
+      expect(v.needs_response).toHaveLength(0);
+      expect(v.upcoming.map((u) => u.game.id)).toEqual(["g"]);
+    });
+  });
+
+  describe("別チームのメンバー ID のとき", () => {
+    it("MemberNotFoundError を投げる", async () => {
+      const { ctx } = buildFakeContext();
+      await seed(ctx);
+      await expect(
+        buildMemberView(ctx, { teamId: "t", memberId: "ghost" }),
+      ).rejects.toThrow(/member が存在しません/);
     });
   });
 });
