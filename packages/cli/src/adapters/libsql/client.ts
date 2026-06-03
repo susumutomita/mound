@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { type Client, createClient } from "@libsql/client";
+import { readConfig } from "../config";
 import { SCHEMA_SQL, SCHEMA_VERSION } from "./schema";
 
 export type DbClient = Client;
@@ -10,14 +11,18 @@ export interface DbConfig {
   authToken?: string;
 }
 
+// 接続先の決定順: 環境変数 > ~/.mound/config.json (mound config set) > 既定ファイル。
 export function buildDbConfig(
   env: Record<string, string | undefined>,
 ): DbConfig {
+  const file = readConfig(env);
   const url =
     env.MOUND_DB_URL ??
     env.TURSO_DATABASE_URL ??
+    file.db_url ??
     `file:${env.HOME ?? "."}/.mound/mound.db`;
-  const authToken = env.MOUND_DB_AUTH_TOKEN ?? env.TURSO_AUTH_TOKEN;
+  const authToken =
+    env.MOUND_DB_AUTH_TOKEN ?? env.TURSO_AUTH_TOKEN ?? file.db_auth_token;
   return { url, authToken };
 }
 

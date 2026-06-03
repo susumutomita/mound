@@ -28,6 +28,7 @@ import { runAgenda } from "./commands/agenda";
 import { runAudit } from "./commands/audit";
 import { runAuto } from "./commands/auto";
 import { runExport, runImport } from "./commands/backup";
+import { runConfig } from "./commands/config";
 import { runGame } from "./commands/game";
 import { runGround } from "./commands/ground";
 import { runInit } from "./commands/init";
@@ -87,6 +88,11 @@ export async function run(options: RunOptions): Promise<number> {
   let db: DbClient | null = null;
 
   try {
+    // config は接続先そのものを設定するコマンドなので DB を開かずに処理する。
+    if (command === "config") {
+      await runConfig(subArgs, options.env, renderOpts);
+      return 0;
+    }
     db = options.db ?? openDb(buildDbConfig(options.env));
     if (command !== "init") {
       await ensureSchemaUpToDate(db);
