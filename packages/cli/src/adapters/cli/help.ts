@@ -28,7 +28,8 @@ export const HELP = `mound — 草野球チーム向け試合成立 CLI
   audit --target <ID> [--type game|team|member]
   agenda [--team <ID>] [--horizon-days N]    いま注意すべき試合 (メニューバー向け)
   ground import [--file PATH | --stdin]      外部スクレイパの JSON を取り込む
-  ground list [--source S] [--date YYYY-MM-DD]
+  ground list [--source S] [--date YYYY-MM-DD] [--all] [--max-age-hours N]  既定=今日以降×直近48h
+  ground prune [--before-date YYYY-MM-DD] [--max-age-hours N]  過去/古い/テストを掃除
   ground diff [--since ISO | --minutes N] [--source S] [--game-date YYYY-MM-DD]
   ground sync [--region R] [--bin PATH] [--timeout-ms N] [--notify --team T]
   ground match --game <GAME_ID>              試合の date+会場に合う空きを列挙
@@ -538,15 +539,37 @@ JSON 出力:
   "ground list": `mound ground list — 取り込み済みの空き枠を表示
 
 使い方:
-  mound ground list [--source <SOURCE>] [--date YYYY-MM-DD] [--json]
+  mound ground list [--source <SOURCE>] [--date YYYY-MM-DD] [--all] [--max-age-hours N] [--since-date YYYY-MM-DD] [--json]
+
+既定の絞り込み (古い/過去のゴミを出さないため):
+  - 今日以降の日付 (date_iso >= today) のみ
+  - 直近 48h 以内に取得 (ingested_at) した枠のみ
+  → cron で定期 sync していれば「いま本当に空いている枠」だけが出る。
 
 フラグ:
-  --source  (任意) スクレイパ source ID (yokohama, kanagawa, ...)
-  --date    (任意) 日付 (YYYY-MM-DD) で絞り込み
+  --source         (任意) スクレイパ source ID (yokohama, kanagawa, ...)
+  --date           (任意) 特定日 (YYYY-MM-DD) だけ
+  --all            (任意) 既定フィルタを外して全件
+  --max-age-hours  (任意) 鮮度窓を時間で変更 (既定 48, 0=無制限)
+  --since-date     (任意) この日以降に変更 (既定 today)
 
 JSON 出力:
   GroundSlot[] { id, slot_key, source, facility_name, date_iso, date_raw,
                  time_range, status, raw, scraped_at, first_seen_at, ingested_at }
+`,
+
+  "ground prune": `mound ground prune — 古い/過去/テストの空き枠を物理削除
+
+使い方:
+  mound ground prune [--before-date YYYY-MM-DD] [--max-age-hours N] [--json]
+
+削除対象 (いずれかに該当):
+  - テストデータ (facility_name に「動作確認」を含む) ← 常に削除
+  - --before-date より前の日付 (既定: today)
+  - --max-age-hours より前に取得した枠 (指定時のみ)
+
+JSON 出力:
+  { "deleted": number, "before_date": string, "ingested_before": string|null }
 `,
 
   notify: `mound notify — Discord / Slack / LINE への通知チャネル

@@ -152,6 +152,7 @@ export function buildFakeContext(
   const members = new Map<string, Member>();
   const games = new Map<string, Game>();
   const rsvps = new Map<string, Rsvp>();
+  const groundSlots = new Map<string, GroundSlot>();
   const audit: AuditLog[] = [];
   const { store: observations, repo: observationRepo } = buildObservationRepo();
   const { store: knowledge, repo: knowledgeRepo } = buildKnowledgeRepo();
@@ -273,10 +274,45 @@ export function buildFakeContext(
         ),
     },
     groundSlots: {
-      upsert: async (s: GroundSlot) => s,
-      list: async () => [],
-      listNewerThan: async () => [],
-      getByKey: async () => null,
+      upsert: async (s) => {
+        groundSlots.set(s.slot_key, s);
+        return s;
+      },
+      list: async (f) =>
+        Array.from(groundSlots.values()).filter(
+          (s) =>
+            (!f.source || s.source === f.source) &&
+            (!f.dateIso || s.date_iso === f.dateIso) &&
+            (!f.sinceDate ||
+              (s.date_iso !== null && s.date_iso >= f.sinceDate)) &&
+            (!f.ingestedSince || s.ingested_at >= f.ingestedSince),
+        ),
+      listNewerThan: async (f) =>
+        Array.from(groundSlots.values()).filter(
+          (s) =>
+            s.first_seen_at >= f.since &&
+            (!f.source || s.source === f.source) &&
+            (!f.dateIso || s.date_iso === f.dateIso),
+        ),
+      getByKey: async (k) =>
+        Array.from(groundSlots.values()).find((s) => s.slot_key === k) ?? null,
+      prune: async (f) => {
+        let n = 0;
+        for (const [k, s] of groundSlots) {
+          const isTest = s.facility_name.includes("動作確認");
+          const isPast =
+            f.beforeDate !== undefined &&
+            s.date_iso !== null &&
+            s.date_iso < f.beforeDate;
+          const isStale =
+            f.ingestedBefore !== undefined && s.ingested_at < f.ingestedBefore;
+          if (isTest || isPast || isStale) {
+            groundSlots.delete(k);
+            n++;
+          }
+        }
+        return n;
+      },
     },
     notifications: {
       insert: async (c: NotificationChannel) => c,

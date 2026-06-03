@@ -8,6 +8,7 @@ import {
   findSlotsMatchingGame,
   importGroundAvailability,
   listGroundSlots,
+  pruneGroundSlots,
 } from "../../../usecases/ground";
 import { notifyGroundCancellation } from "../../../usecases/notification";
 import {
@@ -33,6 +34,7 @@ export async function runGround(
   if (sub === "diff") return diffCommand(args, ctx, opts);
   if (sub === "sync") return syncCommand(args, ctx, opts);
   if (sub === "match") return matchCommand(args, ctx, opts);
+  if (sub === "prune") return pruneCommand(args, ctx, opts);
   throw new UsageError(`未知のサブコマンド: ground ${sub}`);
 }
 
@@ -114,25 +116,89 @@ async function importCommand(
   emit(result, text, opts);
 }
 
+const maxAgeHoursInput = z.coerce
+  .number()
+  .int()
+  .min(0)
+  .max(24 * 365);
+
+// 既定の鮮度窓 (時間)。これより古い取得は「もう空いてないかも」なので隠す。
+const DEFAULT_MAX_AGE_HOURS = 48;
+
+function todayIso(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
 async function listCommand(
   args: ParsedArgs,
   ctx: UseCaseContext,
   opts: RenderOptions,
 ): Promise<void> {
+  const showAll = boolFlag(args.flags, "all");
+  const explicitDate = optionalFlag(args.flags, "date");
+  const now = ctx.now();
+
+  // 既定は「今日以降 × 直近 N 時間以内に取得」だけ。--all で全件、--date で特定日。
+  const maxAgeFlag = optionalFlag(args.flags, "max-age-hours");
+  const maxAgeHours = maxAgeFlag
+    ? parseOrUsage(maxAgeHoursInput, maxAgeFlag)
+    : DEFAULT_MAX_AGE_HOURS;
+  const sinceDate = showAll
+    ? undefined
+    : (optionalFlag(args.flags, "since-date") ?? todayIso(now));
+  const ingestedSince =
+    showAll || maxAgeHours === 0
+      ? undefined
+      : new Date(now.getTime() - maxAgeHours * 3_600_000).toISOString();
+
   const slots = await listGroundSlots(ctx, {
     source: optionalFlag(args.flags, "source"),
-    dateIso: optionalFlag(args.flags, "date"),
+    dateIso: explicitDate,
+    sinceDate: explicitDate ? undefined : sinceDate,
+    ingestedSince,
   });
+  const header = showAll
+    ? `${slots.length} 件 (全件)`
+    : `${slots.length} 件 (今日以降 × 直近 ${maxAgeHours}h 取得ぶん。全件は --all)`;
   emit(
     slots,
-    formatRows(slots, [
-      "source",
-      "facility_name",
-      "date_iso",
-      "time_range",
-      "status",
-      "first_seen_at",
-    ]),
+    [
+      header,
+      formatRows(slots, [
+        "source",
+        "facility_name",
+        "date_iso",
+        "time_range",
+        "status",
+        "ingested_at",
+      ]),
+    ].join("\n"),
+    opts,
+  );
+}
+
+async function pruneCommand(
+  args: ParsedArgs,
+  ctx: UseCaseContext,
+  opts: RenderOptions,
+): Promise<void> {
+  const now = ctx.now();
+  // 既定: 過去日 + テストデータを削除。--max-age-hours で古い取得も対象に。
+  const beforeDate = optionalFlag(args.flags, "before-date") ?? todayIso(now);
+  const maxAgeFlag = optionalFlag(args.flags, "max-age-hours");
+  const ingestedBefore = maxAgeFlag
+    ? new Date(
+        now.getTime() - parseOrUsage(maxAgeHoursInput, maxAgeFlag) * 3_600_000,
+      ).toISOString()
+    : undefined;
+  const deleted = await pruneGroundSlots(ctx, { beforeDate, ingestedBefore });
+  emit(
+    {
+      deleted,
+      before_date: beforeDate,
+      ingested_before: ingestedBefore ?? null,
+    },
+    `古い/過去/テストの空き枠を ${deleted} 件削除しました (${beforeDate} より前の日付・テストデータ${ingestedBefore ? ` + ${maxAgeFlag}h より前の取得` : ""})`,
     opts,
   );
 }

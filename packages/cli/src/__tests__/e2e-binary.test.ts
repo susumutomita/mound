@@ -338,7 +338,8 @@ describe("e2e: CLI を subprocess で起動する Phase 1 シナリオ", () => {
       expect(summary.inserted).toBe(1);
 
       const listR = runMound(
-        ["ground", "list", "--source", "yokohama", "--json"],
+        // --all で日付/鮮度フィルタを外し、取り込んだ固定日付の slot を確実に見る
+        ["ground", "list", "--source", "yokohama", "--all", "--json"],
         env,
       );
       expect(listR.code).toBe(0);

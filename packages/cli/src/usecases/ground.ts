@@ -3,8 +3,12 @@ import type { Game, GroundSlot } from "../domain/types";
 import type {
   GroundSlotDiffFilter,
   GroundSlotFilter,
+  GroundSlotPruneFilter,
   UseCaseContext,
 } from "../ports";
+
+// スクレイパが健全性チェックで出すダミー会場。実空きではないので取り込まない/掃除する。
+export const TEST_FACILITY_MARKER = "動作確認";
 
 // ground-reservation (susumutomita/ground-reservation) の `--json` 出力 schema。
 // 破壊的変更が必要になったら schema_version を上げる。
@@ -69,6 +73,8 @@ export async function importGroundAvailability(
       regionsWithErrors.push({ region: region.region, errors: region.errors });
     }
     for (const rec of region.records) {
+      // テスト用ダミー会場 (動作確認…) は取り込まない。
+      if (rec.facility_name.includes(TEST_FACILITY_MARKER)) continue;
       total += 1;
       const slotKey = makeSlotKey(
         rec.region,
@@ -115,6 +121,14 @@ export async function listGroundSlots(
   filter: GroundSlotFilter,
 ): Promise<GroundSlot[]> {
   return ctx.repo.groundSlots.list(filter);
+}
+
+// 過去日 / 古い取得 / テストデータを物理削除して、削除件数を返す。
+export async function pruneGroundSlots(
+  ctx: UseCaseContext,
+  filter: GroundSlotPruneFilter,
+): Promise<number> {
+  return ctx.repo.groundSlots.prune(filter);
 }
 
 // 「直近キャンセル候補」を返す: first_seen_at >= since の slot を抽出する。

@@ -25,6 +25,7 @@ import type {
   GameRepository,
   GroundSlotDiffFilter,
   GroundSlotFilter,
+  GroundSlotPruneFilter,
   GroundSlotRepository,
   GroundWatchRepository,
   KnowledgeFilter,
@@ -437,11 +438,39 @@ class LibsqlGroundSlotRepository implements GroundSlotRepository {
       where.push("date_iso = ?");
       args.push(filter.dateIso);
     }
+    if (filter.sinceDate) {
+      // date_iso が null の枠は日付フィルタ時は除外する。
+      where.push("date_iso IS NOT NULL AND date_iso >= ?");
+      args.push(filter.sinceDate);
+    }
+    if (filter.ingestedSince) {
+      where.push("ingested_at >= ?");
+      args.push(filter.ingestedSince);
+    }
     const sql = `SELECT * FROM ground_slots${
       where.length ? ` WHERE ${where.join(" AND ")}` : ""
     } ORDER BY date_iso ASC, time_range ASC, facility_name ASC`;
     const r = await this.db.execute({ sql, args });
     return r.rows.map(rowToGroundSlot);
+  }
+
+  async prune(filter: GroundSlotPruneFilter): Promise<number> {
+    // 過去日 OR 古い取得 OR テストデータ (動作確認) を削除する。
+    const or: string[] = ["facility_name LIKE '%動作確認%'"];
+    const args: InValue[] = [];
+    if (filter.beforeDate) {
+      or.push("(date_iso IS NOT NULL AND date_iso < ?)");
+      args.push(filter.beforeDate);
+    }
+    if (filter.ingestedBefore) {
+      or.push("ingested_at < ?");
+      args.push(filter.ingestedBefore);
+    }
+    const r = await this.db.execute({
+      sql: `DELETE FROM ground_slots WHERE ${or.join(" OR ")}`,
+      args,
+    });
+    return r.rowsAffected;
   }
 
   async getByKey(slotKey: string): Promise<GroundSlot | null> {
