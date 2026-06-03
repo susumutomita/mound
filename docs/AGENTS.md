@@ -432,6 +432,52 @@ mound agenda --team "$TEAM" --json
 
 ここまでで「いま誰がいて」「直近の試合はどうなっていて」「監視条件は何で」「通知先は何か」が全部 mound から取れます。**Hermes の私的 memory は要らない**。
 
+### 6.7 完全自動化ループ — 人手ゼロで回す(★これが本体)
+
+mound は「決定的ツール+記憶」。**完全自動化の本体は、既存エージェント (Hermes/Codex/Claude) が
+このループを cron / 常駐で回すこと**。専用 Web アプリも固定 UI も作らない — エージェントが文脈に
+合わせて「表示・配達・取り込み」をその場で行う。
+
+#### ループ(1 周)
+1. **読む** — `mound view --team $T --json`(全体)/ `mound auto plan --team $T --json`(打つべき手)
+2. **各自の文面を生成** — 出欠が要る人ごとに `mound view --member $M --json` を読み、本人向け表示
+   (LINE 文面 / HTML / テキスト)を生成。**相手・誰が来るか・出る?欠席?** を必ず入れる
+   (草野球は社交で決まる:「あいつが来るなら行く」)。
+3. **配る** — `mound notify`(LINE/Discord)で本人へ。
+4. **返信を取り込む** — チャネルの返信(タップ/テキスト)を読み、
+   `mound rsvp set --game $G --member $M --response AVAILABLE|UNAVAILABLE|MAYBE`。
+   ← **双方向はエージェントのチャネルアクセス責務**(mound は rsvp set を提供済み)。
+5. **安全な手は自動 / 拘束する手は提案** — `mound auto run --team $T --apply`
+   (PUBLISH / COMPLETE / リマインドは自動)。CONFIRM(確定)は提案 → 人の OK で
+   `mound game transition <ID> --to CONFIRMED`。
+6. **精算** — COMPLETED になったら `mound settle open --game $G --amount … --link <PayPay>`
+   → `settle remind` → 入金確認できた人を `settle pay`。全員払うと自動 SETTLED。
+7. **学習** — 区切りで `mound learn --team $T --apply`(default_ground / 曜日 / 出席率が育つ)。
+
+#### 月次(抽選予約ルーティン)
+- 翌月分:`mound game generate --team $T --month YYYY-MM`(default_weekday から土曜分を WANTED で起票)
+- 抽選申込(人手)→ 取れたら `game update <ID> --ground-status SECURED --ground <会場>`、
+  外れたら `--ground-status LOST` → キャンセル監視へ。
+- キャンセル監視:cron で `mound ground sync --region all --notify --team $T`(**間隔を空けて。
+  叩きすぎ厳禁**)+ `mound watch`。空きは `ground list`(実行時点以降のみ)/ `ground match --game`。
+
+#### cron 例
+```bash
+*/30 * * * * mound ground sync --region all --notify --team "$T" --json >/dev/null   # キャンセル監視(間隔厳守)
+0  8 * * *   mound auto run --team "$T" --apply --json >> ~/.mound/auto.log          # 日次:安全な手だけ自動
+0  9 * * 1   mound learn --team "$T" --apply --json   >> ~/.mound/learn.log          # 週次:学習
+0  9 1 * *   mound game generate --team "$T" --month <翌月> --json                    # 月次:抽選候補を起票
+# 判断が要る点検は LLM をヘッドレスで:
+0  7 * * *   claude -p "docs/AGENTS.md §6.7 に従い team $T を1周。確定/抽選/精算は提案だけ" >> ~/.mound/agent.log
+```
+
+#### 人が最後に決める(自動化しない)
+- 試合の **確定 (CONFIRM)・中止** — チームを拘束するので提案まで。
+- **抽選予約の投入・PayPay リンク発行・入金の最終消し込み** — 外部に公開 API が無い手作業。
+
+これで「人間がやるのは『立てて』と『承諾』、メンバーは出欠を返すだけ」に近づく。
+固定 UI を作らず、表示はエージェントが毎回その場で組む(状態が変われば・人が変われば別の表示)。
+
 ---
 
 ## 7. JSON 出力スキーマ (主要型)
