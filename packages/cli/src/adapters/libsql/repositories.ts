@@ -85,6 +85,14 @@ class LibsqlTeamRepository implements TeamRepository {
     });
     return r.rows[0] ? rowToTeam(r.rows[0]) : null;
   }
+
+  async update(team: Team): Promise<Team> {
+    await this.db.execute({
+      sql: "UPDATE teams SET name = ?, home_area = ?, updated_at = ? WHERE id = ?",
+      args: [team.name, team.home_area, team.updated_at, team.id],
+    });
+    return team;
+  }
 }
 
 class LibsqlMemberRepository implements MemberRepository {
@@ -121,6 +129,28 @@ class LibsqlMemberRepository implements MemberRepository {
       args: [id],
     });
     return r.rows[0] ? rowToMember(r.rows[0]) : null;
+  }
+
+  async update(member: Member): Promise<Member> {
+    await this.db.execute({
+      sql: "UPDATE members SET name = ?, email = ?, role = ?, updated_at = ? WHERE id = ?",
+      args: [
+        member.name,
+        member.email,
+        member.role,
+        member.updated_at,
+        member.id,
+      ],
+    });
+    return member;
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const r = await this.db.execute({
+      sql: "DELETE FROM members WHERE id = ?",
+      args: [id],
+    });
+    return r.rowsAffected > 0;
   }
 }
 

@@ -28,6 +28,10 @@ function buildFake(): {
     },
     list: async () => Array.from(teams.values()),
     get: async (id) => teams.get(id) ?? null,
+    update: async (t) => {
+      teams.set(t.id, t);
+      return t;
+    },
   };
   const watchRepo: GroundWatchRepository = {
     insert: async (w) => {

@@ -45,6 +45,10 @@ function buildFake(opts?: { senderError?: Error }): Fake {
     },
     list: async () => Array.from(teams.values()),
     get: async (id) => teams.get(id) ?? null,
+    update: async (t) => {
+      teams.set(t.id, t);
+      return t;
+    },
   };
 
   const notificationRepo: NotificationChannelRepository = {
